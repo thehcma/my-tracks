@@ -1,0 +1,81 @@
+#!/bin/bash
+# Setup script for OwnTracks Django backend
+
+set -e  # Exit on error
+
+echo "================================================"
+echo "OwnTracks Django Backend - Setup Script"
+echo "================================================"
+echo ""
+
+# Check if Python 3.12+ is available
+echo "Checking Python version..."
+if command -v python3 &> /dev/null; then
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
+    echo "✓ Found Python $PYTHON_VERSION"
+else
+    echo "❌ Python 3 not found. Please install Python 3.12 or higher."
+    exit 1
+fi
+
+# Check if uv is installed
+echo ""
+echo "Checking for uv package manager..."
+if ! command -v uv &> /dev/null; then
+    echo "⚠️  uv not found. Installing uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.cargo/bin:$PATH"
+else
+    echo "✓ uv is installed"
+fi
+
+echo ""
+echo "📁 Creating project structure..."
+mkdir -p mytracks
+mkdir -p tracker/migrations
+
+echo "✓ Directories created"
+
+echo ""
+echo "📦 Running installation script..."
+python3 install.py
+
+echo ""
+echo "🔧 Creating virtual environment..."
+uv venv
+
+echo ""
+echo "📥 Installing dependencies..."
+source .venv/bin/activate
+uv pip install -e .
+
+echo ""
+echo "📝 Setting up environment..."
+if [ ! -f .env ]; then
+    cp .env.example .env
+    echo "✓ Created .env file from .env.example"
+    echo "⚠️  Please edit .env and set your SECRET_KEY"
+else
+    echo "✓ .env file already exists"
+fi
+
+echo ""
+echo "🗄️  Running migrations..."
+python manage.py migrate
+
+echo ""
+echo "🔍 Verifying setup..."
+python3 verify_setup.py
+
+echo ""
+echo "✅ Setup complete!"
+echo ""
+echo "Next steps:"
+echo "1. Edit .env and set a secure SECRET_KEY"
+echo "2. Create a superuser: python manage.py createsuperuser"
+echo "3. Start the server: python manage.py runserver"
+echo "4. Configure OwnTracks app to use: http://localhost:8000/api/locations/"
+echo ""
+echo "For production deployment, see DEPLOYMENT.md"
+echo "================================================"
+
