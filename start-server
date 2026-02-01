@@ -68,6 +68,7 @@ fi
 
 # Activate virtual environment
 if [ -d ".venv" ]; then
+    # shellcheck source=/dev/null
     source .venv/bin/activate
 else
     echo "❌ Error: Virtual environment not found."
@@ -78,7 +79,7 @@ fi
 # Create logs directory if logging to file
 if [ "$LOG_TO_CONSOLE" = false ]; then
     mkdir -p logs
-    LOG_FILE="logs/django-$(date +%Y%m%d-%H%M%S).log"
+    LOG_FILE="logs/my-tracks-$(date +%Y%m%d-%H%M%S).log"
 fi
 
 # Export Django logging configuration
