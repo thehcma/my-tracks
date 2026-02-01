@@ -32,7 +32,7 @@ This document defines the four specialized agents for the OwnTracks Django backe
 1. Switch to main branch: `git checkout main`
 2. Pull latest changes: `git pull origin main`
 3. Apply any pending migrations: `uv run python manage.py migrate`
-4. Restart the server: `./start_server`
+4. Restart the server: `./start-server`
 
 ### Pull Request Requirements
 
@@ -80,10 +80,26 @@ This document defines the four specialized agents for the OwnTracks Django backe
 
 **Shell Script Convention**:
 - All shell scripts MUST be created without the `.sh` extension
-- Examples: `setup` (not `setup.sh`), `start_server` (not `start_server.sh`)
+- Use hyphens for multi-word script names (kebab-case)
+- Examples: `setup` (not `setup.sh`), `start-server` (not `start_server.sh` or `start_server`)
 - Make scripts executable with `chmod +x scriptname`
 - Use shebang `#!/usr/bin/env bash` for portability
 - Rationale: Cleaner command-line interface, Unix convention
+
+**Shell Script Logging Convention**:
+- Scripts that run services MUST support configurable logging
+- Provide `--log-level` flag accepting: debug, info, warning, error, critical
+- Default log level: `warning` (balances information with noise reduction)
+- Logs MUST go to a file by default (in `logs/` directory)
+- Provide `--console` flag to output logs to console instead
+- Log files MUST include timestamp: `logs/service-YYYYMMDD-HHMMSS.log`
+- Always show log destination on startup
+- Examples:
+  - ✅ `./start-server` (warning level, file logging)
+  - ✅ `./start-server --log-level debug` (debug level, file logging)
+  - ✅ `./start-server --console` (warning level, console output)
+  - ✅ `./start-server --log-level info --console` (info level, console output)
+- Rationale: Consistent debugging experience, production-ready defaults, preserves logs for analysis
 
 **Error Message Guidelines**:
 - Error messages must provide context, not just indicate failure
