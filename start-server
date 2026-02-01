@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+#
+# Start the Django development server on port 8080
+#
+# Usage:
+#   ./start-server [OPTIONS]
+#
+# Options:
+#   --log-level LEVEL    Set Django log level (debug, info, warning, error, critical)
+#                        Default: warning
+#   --console            Output logs to console instead of file
+#   -h, --help           Show this help message
+#
+# Examples:
+#   ./start-server                    # Start with default (warning level, file logging)
+#   ./start-server --log-level debug  # Debug level, logs to file
+#   ./start-server --console          # Warning level, logs to console
+#   ./start-server --log-level info --console  # Info level, console output
+
+set -e
+
+# Default values
+LOG_LEVEL="WARNING"
+LOG_TO_CONSOLE=false
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --log-level)
+            LOG_LEVEL=$(echo "$2" | tr '[:lower:]' '[:upper:]')
+            shift 2
+            ;;
+        --console)
+            LOG_TO_CONSOLE=true
+            shift
+            ;;
+        -h|--help)
+            sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
+            exit 0
+            ;;
+        *)
+            echo "Error: Unknown option: $1"
+            echo "Run './start-server --help' for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Validate log level
+case $LOG_LEVEL in
+    DEBUG|INFO|WARNING|ERROR|CRITICAL)
+        ;;
+    *)
+        echo "Error: Invalid log level: $LOG_LEVEL"
+        echo "Valid levels: debug, info, warning, error, critical"
+        exit 1
+        ;;
+esac
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Add uv to PATH if it exists
+if [ -d "$HOME/.local/bin" ]; then
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+
+# Activate virtual environment
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+else
+    echo "❌ Error: Virtual environment not found."
+    echo "Run './setup' first to create the environment."
+    exit 1
+fi
+
+# Create logs directory if logging to file
+if [ "$LOG_TO_CONSOLE" = false ]; then
+    mkdir -p logs
+    LOG_FILE="logs/django-$(date +%Y%m%d-%H%M%S).log"
+fi
+
+# Export Django logging configuration
+export DJANGO_LOG_LEVEL="$LOG_LEVEL"
+
+# Start server on port 8080, bound to all interfaces for LAN access
+echo "🚀 Starting Django server on http://0.0.0.0:8080/"
+echo "📱 Accessible on your LAN - find your IP with: ipconfig getifaddr en0"
+echo "📝 Log level: $LOG_LEVEL"
+
+if [ "$LOG_TO_CONSOLE" = true ]; then
+    echo "📺 Logging to: console"
+    echo "Press CTRL-C to stop the server"
+    echo ""
+    python manage.py runserver 0.0.0.0:8080
+else
+    echo "📄 Logging to: $LOG_FILE"
+    echo "💡 Tip: Use --console flag to log to console instead"
+    echo "Press CTRL-C to stop the server"
+    echo ""
+    python manage.py runserver 0.0.0.0:8080 >> "$LOG_FILE" 2>&1
+fi
