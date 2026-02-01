@@ -34,6 +34,13 @@ This document defines the four specialized agents for the OwnTracks Django backe
 3. Apply any pending migrations: `uv run python manage.py migrate`
 4. Restart the server: `./start-server`
 
+**GitHub Actions Polling**:
+- When checking CI/CD status, poll frequently to minimize wait time
+- Use short initial delay (5-10 seconds) then check every 5 seconds
+- Example: `sleep 10 && gh pr checks <pr-number>` then `sleep 5 && gh pr checks <pr-number>`
+- Avoid long waits (20-30 seconds) between checks
+- Rationale: Faster feedback loop, better user experience
+
 ### Pull Request Requirements
 
 **Single Responsibility Principle**:
