@@ -6,6 +6,8 @@ This document defines the four specialized agents for the OwnTracks Django backe
 
 **Package Manager**: This project uses `uv` as the Python package manager for fast, reliable dependency management.
 
+**Python Version Policy**: Always use the latest stable Python version available via Homebrew. Currently Python 3.14.x is the latest stable release. The project requires Python 3.12+ as minimum, but should be developed and tested with the latest version to ensure compatibility and access to latest features.
+
 ## Workflow Requirements
 
 **CRITICAL**: All changes MUST go through pull requests - direct pushes to main are blocked by branch protection.
