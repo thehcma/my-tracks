@@ -80,22 +80,22 @@ class LocationViewSet(viewsets.ModelViewSet):
         if msg_type != 'location':
             print(f"ℹ️  Received non-location message: {msg_type}")
             logger.info(f"Received non-location message type: {msg_type}, storing")
-
+            
             # Try to identify the device - prioritize topic over tid
             device = None
             device_id = None
-
+            
             # Extract from topic first (format: owntracks/user/deviceid)
             if 'topic' in request.data:
                 topic = request.data['topic']
                 parts = topic.split('/')
                 if len(parts) >= 3:
                     device_id = parts[-1]
-
+            
             # Fallback to tid
             if not device_id:
                 device_id = request.data.get('tid')
-
+            
             if device_id:
                 device, created = Device.objects.get_or_create(
                     device_id=device_id,
@@ -119,7 +119,7 @@ class LocationViewSet(viewsets.ModelViewSet):
 
             # OwnTracks expects an empty JSON array response
             return Response([], status=status.HTTP_200_OK)
-
+        
         # Extract device_id from topic if present (format: owntracks/user/deviceid)
         data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
         if 'topic' in data and 'device_id' not in data:
@@ -128,7 +128,7 @@ class LocationViewSet(viewsets.ModelViewSet):
             if len(parts) >= 3:
                 data['device_id'] = parts[-1]  # Get last part of topic path
                 logger.info(f"Extracted device_id '{parts[-1]}' from topic '{topic}'")
-
+        
         serializer = self.get_serializer(data=data, context={'client_ip': client_ip})
         if not serializer.is_valid():
             print("="*80)

@@ -913,7 +913,7 @@ def home(request):
             const batt = location.battery_level || 'N/A';
             const conn = location.connection_type === 'w' ? 'WiFi' : location.connection_type === 'm' ? 'Mobile' : 'N/A';
             const ip = location.ip_address || 'N/A';
-
+            
             // Show device with tracker ID if available
             let deviceDisplay = device;
             if (trackerId) {{
@@ -921,9 +921,9 @@ def home(request):
             }} else if (device !== deviceId) {{
                 deviceDisplay = `${{device}} (${{deviceId}})`;
             }}
-
+            
             entry.innerHTML = `<span class="log-time">${{time}}</span> | <span class="log-device">${{deviceDisplay}}</span> | <span class="log-ip">${{ip}}</span> | <span class="log-coords">${{lat}}, ${{lon}}</span> | <span class="log-meta">acc:${{acc}}m alt:${{alt}}m vel:${{vel}}km/h batt:${{batt}}% ${{conn}}</span>`;
-
+            
             container.insertBefore(entry, container.firstChild);
 
             // Auto-scroll to top (where new entries are added) after DOM update
