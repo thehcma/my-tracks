@@ -246,7 +246,8 @@ class TestLocationAPI:
         message = OwnTracksMessage.objects.get(message_type='status')
         assert_that(message.payload['_type'], equal_to('status'))
         assert_that(message.device, is_not(none()))
-        assert_that(message.device.device_id, equal_to('XY'))
+        if message.device:  # Type guard for Pylance
+            assert_that(message.device.device_id, equal_to('XY'))
     
     def test_list_locations(self, api_client: APIClient, sample_location: Location) -> None:
         """Test listing locations."""
