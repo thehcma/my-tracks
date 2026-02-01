@@ -85,19 +85,32 @@ fi
 # Export Django logging configuration
 export DJANGO_LOG_LEVEL="$LOG_LEVEL"
 
+# Get the local IP address
+LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "unknown")
+
 # Start server on port 8080, bound to all interfaces for LAN access
 echo "🚀 Starting Django server on http://0.0.0.0:8080/"
-echo "📱 Accessible on your LAN - find your IP with: ipconfig getifaddr en0"
+echo ""
+echo "📡 Network Access:"
+echo "   Local:   http://localhost:8080/"
+if [ "$LOCAL_IP" != "unknown" ]; then
+    echo "   Network: http://$LOCAL_IP:8080/"
+else
+    echo "   Network: Unable to determine IP address"
+fi
+echo ""
 echo "📝 Log level: $LOG_LEVEL"
 
 if [ "$LOG_TO_CONSOLE" = true ]; then
     echo "📺 Logging to: console"
+    echo ""
     echo "Press CTRL-C to stop the server"
     echo ""
     python manage.py runserver 0.0.0.0:8080
 else
     echo "📄 Logging to: $LOG_FILE"
     echo "💡 Tip: Use --console flag to log to console instead"
+    echo ""
     echo "Press CTRL-C to stop the server"
     echo ""
     python manage.py runserver 0.0.0.0:8080 >> "$LOG_FILE" 2>&1

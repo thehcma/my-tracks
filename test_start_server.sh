@@ -67,7 +67,7 @@ test_valid_log_levels() {
     for level in debug info warning error critical; do
         # Test that the script accepts the log level without error
         # We use a timeout and kill it quickly since we don't actually want to start the server
-        if ! timeout 2 $SCRIPT --log-level "$level" 2>&1 | head -5 | grep -q "Log level: $(echo "$level" | tr '[:lower:]' '[:upper:]')"; then
+        if ! timeout 2 $SCRIPT --log-level "$level" 2>&1 | grep -q "Log level: $(echo "$level" | tr '[:lower:]' '[:upper:]')"; then
             all_valid=false
             break
         fi
@@ -84,7 +84,7 @@ test_valid_log_levels() {
 
 test_console_flag() {
     echo -n "Test: Console flag works... "
-    if timeout 2 $SCRIPT --console 2>&1 | head -5 | grep -q "Logging to: console"; then
+    if timeout 2 $SCRIPT --console 2>&1 | grep -q "Logging to: console"; then
         echo -e "${GREEN}✓ PASS${NC}"
         ((TESTS_PASSED++))
     else
@@ -95,7 +95,7 @@ test_console_flag() {
 
 test_file_logging() {
     echo -n "Test: File logging creates timestamped log... "
-    if timeout 2 $SCRIPT 2>&1 | head -5 | grep -q "Logging to: logs/my-tracks-"; then
+    if timeout 2 $SCRIPT 2>&1 | grep -q "Logging to: logs/my-tracks-"; then
         echo -e "${GREEN}✓ PASS${NC}"
         ((TESTS_PASSED++))
     else
