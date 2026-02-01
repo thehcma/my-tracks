@@ -1192,7 +1192,7 @@ def home(request):
             document.getElementById('log-count').textContent = locations.length + ' waypoint' + (locations.length !== 1 ? 's' : '');
         }}
 
-        function addLogEntry(location) {{
+        function addLogEntry(location, skipScroll = false) {{
             const container = document.getElementById('log-container');
             const loading = document.getElementById('loading');
             if (loading) loading.remove();
@@ -1227,10 +1227,12 @@ def home(request):
             
             container.insertBefore(entry, container.firstChild);
 
-            // Auto-scroll to top (where new entries are added) after DOM update
-            requestAnimationFrame(() => {{
-                entry.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
-            }});
+            // Auto-scroll so newest entry is roughly in the middle of the view
+            if (!skipScroll) {{
+                requestAnimationFrame(() => {{
+                    entry.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                }});
+            }}
 
             // Keep only last 50 entries
             while (container.children.length > 50) {{
@@ -1319,15 +1321,34 @@ def home(request):
 
                 if (data.results && data.results.length > 0) {{
                     console.log('Processing', data.results.length, 'locations');
-                    // Process all results, newest first (only in live mode)
+                    // Process all results (only in live mode)
                     if (isLiveMode) {{
-                        for (let i = 0; i < data.results.length; i++) {{
-                            const loc = data.results[i];
+                        // On initial load, show recent history in chronological order
+                        // Results come in newest-first, so reverse for initial display
+                        const isInitialLoad = lastTimestamp === null;
+                        const locsToProcess = isInitialLoad ? [...data.results].reverse() : data.results;
+                        
+                        let newestEntry = null;
+                        for (const loc of locsToProcess) {{
                             // Only add if we haven't seen this timestamp yet
                             if (!lastTimestamp || loc.timestamp_unix > lastTimestamp) {{
-                                addLogEntry(loc);
+                                // Skip scrolling during batch load, we'll scroll once at the end
+                                addLogEntry(loc, isInitialLoad);
+                                newestEntry = loc;
                             }}
                         }}
+                        
+                        // After initial batch load, scroll to show the newest entry
+                        if (isInitialLoad && newestEntry) {{
+                            // Use setTimeout to ensure DOM is fully rendered before scrolling
+                            setTimeout(() => {{
+                                const container = document.getElementById('log-container');
+                                if (container.firstChild) {{
+                                    container.firstChild.scrollIntoView({{ behavior: 'instant', block: 'center' }});
+                                }}
+                            }}, 100);
+                        }}
+                        
                         // Update last timestamp to the newest one
                         if (data.results.length > 0) {{
                             lastTimestamp = data.results[0].timestamp_unix;
