@@ -51,7 +51,11 @@ This document defines the four specialized agents for the OwnTracks Django backe
 - ✅ **90% minimum code coverage** (`uv run pytest --cov=tracker --cov-fail-under=90`)
 - ✅ No pytest warnings
 - ✅ VS Code Problems panel clear
-- ✅ CI/CD pipeline passes (GitHub Actions)
+- ✅ **CI/CD pipeline passes** (GitHub Actions at `.github/workflows/pr-validation.yml`)
+  - Verifies Python 3.14 is used (latest stable)
+  - Runs all tests with coverage check
+  - Validates shell scripts with shellcheck
+  - Checks for pending migrations
 
 **After PR is merged**:
 1. Switch to main branch: `git checkout main`
