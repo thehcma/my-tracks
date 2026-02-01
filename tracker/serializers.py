@@ -39,6 +39,7 @@ class LocationSerializer(serializers.ModelSerializer):
     
     device_id = serializers.CharField(write_only=True, required=False)
     tid = serializers.CharField(write_only=True, required=False, help_text="OwnTracks tracker ID")
+    topic = serializers.CharField(write_only=True, required=False, help_text="OwnTracks topic path")
     lat = serializers.DecimalField(
         max_digits=10,
         decimal_places=7,
@@ -99,11 +100,24 @@ class LocationSerializer(serializers.ModelSerializer):
     
     # Custom read-only fields for UI display
     device_name = serializers.SerializerMethodField()
+    device_id_display = serializers.SerializerMethodField()
+    tid_display = serializers.SerializerMethodField()
     timestamp_unix = serializers.SerializerMethodField()
     
     def get_device_name(self, obj: Location) -> str:
+        """Return the device name for display."""
+        # Return custom name if set, otherwise just the device_id
+        if obj.device.name and not obj.device.name.startswith('Device '):
+            return obj.device.name
+        return obj.device.device_id
+    
+    def get_device_id_display(self, obj: Location) -> str:
         """Return the device ID for display."""
         return obj.device.device_id
+    
+    def get_tid_display(self, obj: Location) -> str:
+        """Return the tracker ID (tid) from the original message if available."""
+        return obj.tracker_id if obj.tracker_id else ""
     
     def get_timestamp_unix(self, obj: Location) -> int:
         """Return timestamp as Unix timestamp for JavaScript."""
@@ -112,7 +126,7 @@ class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
         fields = [
-            'id', 'device', 'device_id', 'tid', 'device_name', 'timestamp_unix',
+            'id', 'device', 'device_id', 'tid', 'topic', 'device_name', 'device_id_display', 'tid_display', 'timestamp_unix',
             'latitude', 'longitude', 'timestamp',
             'lat', 'lon', 'long', 'tst',
             'accuracy', 'altitude', 'velocity', 'battery_level', 'connection_type',
@@ -154,12 +168,25 @@ class LocationSerializer(serializers.ModelSerializer):
         logger.info(f"Available keys: {list(attrs.keys())}")
         logger.info("="*80)
         
-        # Device identification
-        device_id = attrs.get('device_id') or attrs.get('tid')
+        # Device identification - prioritize topic over tid
+        device_id = attrs.get('device_id')
+        
+        # Extract device ID from topic if present (format: owntracks/user/deviceid)
+        if not device_id and 'topic' in attrs:
+            topic = attrs.get('topic', '')
+            parts = topic.split('/')
+            if len(parts) >= 3:
+                device_id = parts[-1]  # Get last part of topic path
+                logger.info(f"Extracted device_id '{device_id}' from topic '{topic}'")
+        
+        # Fallback to tid if no topic available
         if not device_id:
-            logger.error("Missing device_id or tid field")
+            device_id = attrs.get('tid')
+        
+        if not device_id:
+            logger.error("Missing device_id, topic, or tid field")
             raise serializers.ValidationError(
-                "Expected 'device_id' or 'tid' field for device identification, got neither"
+                "Expected 'device_id', 'topic', or 'tid' field for device identification, got neither"
             )
         
         # Get or create device
@@ -195,6 +222,7 @@ class LocationSerializer(serializers.ModelSerializer):
             'velocity': attrs.get('vel'),
             'battery_level': attrs.get('batt'),
             'connection_type': attrs.get('conn', ''),
+            'tracker_id': attrs.get('tid', ''),
         }
         
         print(f"✅ Transformed data: {transformed}")

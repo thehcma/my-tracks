@@ -110,6 +110,14 @@ class Location(models.Model):
         help_text="Connection type (from 'conn' field): w=WiFi, o=Offline, m=Mobile"
     )
     
+    # Tracker ID (2-character display code from OwnTracks)
+    tracker_id = models.CharField(
+        max_length=10,
+        blank=True,
+        default='',
+        help_text="OwnTracks tracker ID (from 'tid' field)"
+    )
+    
     # Client information
     ip_address = models.GenericIPAddressField(
         null=True,

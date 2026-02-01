@@ -583,6 +583,8 @@ def home(request):
             
             const time = formatTime(location.timestamp_unix);
             const device = location.device_name || 'Unknown';
+            const deviceId = location.device_id_display || 'N/A';
+            const trackerId = location.tid_display || '';
             const lat = parseFloat(location.latitude).toFixed(6);
             const lon = parseFloat(location.longitude).toFixed(6);
             const acc = location.accuracy || 'N/A';
@@ -592,7 +594,15 @@ def home(request):
             const conn = location.connection_type === 'w' ? 'WiFi' : location.connection_type === 'm' ? 'Mobile' : 'N/A';
             const ip = location.ip_address || 'N/A';
             
-            entry.innerHTML = `<span class="log-time">${{time}}</span> | <span class="log-device">${{device}}</span> | <span class="log-ip">${{ip}}</span> | <span class="log-coords">${{lat}}, ${{lon}}</span> | <span class="log-meta">acc:${{acc}}m alt:${{alt}}m vel:${{vel}}km/h batt:${{batt}}% ${{conn}}</span>`;
+            // Show device with tracker ID if available
+            let deviceDisplay = device;
+            if (trackerId) {{
+                deviceDisplay = `${{device}} (${{trackerId}})`;
+            }} else if (device !== deviceId) {{
+                deviceDisplay = `${{device}} (${{deviceId}})`;
+            }}
+            
+            entry.innerHTML = `<span class="log-time">${{time}}</span> | <span class="log-device">${{deviceDisplay}}</span> | <span class="log-ip">${{ip}}</span> | <span class="log-coords">${{lat}}, ${{lon}}</span> | <span class="log-meta">acc:${{acc}}m alt:${{alt}}m vel:${{vel}}km/h batt:${{batt}}% ${{conn}}</span>`;
             
             container.insertBefore(entry, container.firstChild);
             
