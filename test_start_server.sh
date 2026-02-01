@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+#
+# Tests for the start-server script
+#
+# This test suite validates:
+# - Help message display
+# - Log level validation
+# - Invalid argument handling
+# - Script executes without syntax errors
+
+# Don't exit on error - we want to run all tests
+set +e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
+SCRIPT="./start-server"
+TESTS_PASSED=0
+TESTS_FAILED=0
+
+# Colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+test_help_message() {
+    echo -n "Test: Help message displays... "
+    if $SCRIPT --help > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ PASS${NC}"
+        ((TESTS_PASSED++))
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        ((TESTS_FAILED++))
+    fi
+}
+
+test_invalid_log_level() {
+    echo -n "Test: Invalid log level rejected... "
+    if $SCRIPT --log-level invalid 2>&1 | grep -qi "Invalid log level"; then
+        echo -e "${GREEN}✓ PASS${NC}"
+        ((TESTS_PASSED++))
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        echo "  Expected: 'Invalid log level' message"
+        echo "  Got: $($SCRIPT --log-level invalid 2>&1)"
+        ((TESTS_FAILED++))
+    fi
+}
+
+test_invalid_argument() {
+    echo -n "Test: Invalid argument rejected... "
+    if $SCRIPT --invalid-flag 2>&1 | grep -qi "Unknown option"; then
+        echo -e "${GREEN}✓ PASS${NC}"
+        ((TESTS_PASSED++))
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        echo "  Expected: 'Unknown option' message"
+        echo "  Got: $($SCRIPT --invalid-flag 2>&1)"
+        ((TESTS_FAILED++))
+    fi
+}
+
+test_valid_log_levels() {
+    echo -n "Test: Valid log levels accepted... "
+    local all_valid=true
+    
+    for level in debug info warning error critical; do
+        # Test that the script accepts the log level without error
+        # We use a timeout and kill it quickly since we don't actually want to start the server
+        if ! timeout 2 $SCRIPT --log-level "$level" 2>&1 | head -5 | grep -q "Log level: $(echo "$level" | tr '[:lower:]' '[:upper:]')"; then
+            all_valid=false
+            break
+        fi
+    done
+    
+    if [ "$all_valid" = true ]; then
+        echo -e "${GREEN}✓ PASS${NC}"
+        ((TESTS_PASSED++))
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        ((TESTS_FAILED++))
+    fi
+}
+
+test_console_flag() {
+    echo -n "Test: Console flag works... "
+    if timeout 2 $SCRIPT --console 2>&1 | head -5 | grep -q "Logging to: console"; then
+        echo -e "${GREEN}✓ PASS${NC}"
+        ((TESTS_PASSED++))
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        ((TESTS_FAILED++))
+    fi
+}
+
+test_file_logging() {
+    echo -n "Test: File logging creates timestamped log... "
+    if timeout 2 $SCRIPT 2>&1 | head -5 | grep -q "Logging to: logs/my-tracks-"; then
+        echo -e "${GREEN}✓ PASS${NC}"
+        ((TESTS_PASSED++))
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        ((TESTS_FAILED++))
+    fi
+}
+
+test_shellcheck_passes() {
+    echo -n "Test: Script passes shellcheck... "
+    if command -v shellcheck > /dev/null 2>&1; then
+        if shellcheck "$SCRIPT"; then
+            echo -e "${GREEN}✓ PASS${NC}"
+            ((TESTS_PASSED++))
+        else
+            echo -e "${RED}✗ FAIL${NC}"
+            ((TESTS_FAILED++))
+        fi
+    else
+        echo -e "${GREEN}⊘ SKIP (shellcheck not installed)${NC}"
+    fi
+}
+
+# Run all tests
+echo "========================================"
+echo "Running start-server script tests"
+echo "========================================"
+echo ""
+
+test_help_message
+test_invalid_log_level
+test_invalid_argument
+test_valid_log_levels
+test_console_flag
+test_file_logging
+test_shellcheck_passes
+
+echo ""
+echo "========================================"
+echo "Test Results: ${TESTS_PASSED} passed, ${TESTS_FAILED} failed"
+echo "========================================"
+
+# Exit with error code if any tests failed
+if [ $TESTS_FAILED -gt 0 ]; then
+    exit 1
+fi
+
+exit 0
