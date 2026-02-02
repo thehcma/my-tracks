@@ -1,0 +1,18 @@
+{
+  "implementation": {
+    "model": "claude-opus-4.5",
+    "temperature": "default"
+  },
+  "critique_primary": {
+    "model": "claude-opus-4.5",
+    "temperature": "default"
+  },
+  "critique_secondary": {
+    "model": "gpt-5.1-codex-max",
+    "temperature": "default"
+  },
+  "testing": {
+    "model": "claude-opus-4.5",
+    "temperature": "default"
+  }
+}
