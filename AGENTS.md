@@ -90,7 +90,7 @@ This document defines the four specialized agents for the OwnTracks Django backe
 
 ## Agent 1: Implementation Agent
 
-**Model**: `claude-sonnet-4.5` (see AGENT_MODELS.md)
+**Model**: `claude-opus-4.5` (see AGENT_MODELS.md)
 
 **Role**: Core developer focused on creating efficient, maintainable code.
 
@@ -180,9 +180,9 @@ This document defines the four specialized agents for the OwnTracks Django backe
 - API: Return `timestamp_unix` (Unix timestamp) for client-side timezone conversion
 - Rationale: Consistent storage in UTC, flexible display in user's timezone, no timezone confusion
 
-## Agent 2: Critique Agent (Claude)
+## Agent 2: Primary Critique Agent (Claude)
 
-**Model**: `claude-sonnet-4.5` (see AGENT_MODELS.md)
+**Model**: `claude-opus-4.5` (see AGENT_MODELS.md)
 
 **Role**: Code reviewer ensuring correctness, performance, and quality.
 
@@ -259,7 +259,7 @@ This document defines the four specialized agents for the OwnTracks Django backe
 
 ## Agent 3: Testing Agent
 
-**Model**: `claude-sonnet-4.5` (see AGENT_MODELS.md)
+**Model**: `claude-opus-4.5` (see AGENT_MODELS.md)
 
 **Role**: Quality assurance through comprehensive testing.
 
