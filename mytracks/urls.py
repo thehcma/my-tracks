@@ -168,7 +168,6 @@ def home(request):
         }}
         a {{ color: var(--link-color); text-decoration: none; transition: color 0.3s ease; }}
         a:hover {{ text-decoration: underline; }}
-        .status {{ color: var(--status-color); font-weight: bold; }}
         .log-entry {{
             background: var(--log-entry-bg);
             border-left: 3px solid var(--log-entry-border);
@@ -380,7 +379,6 @@ def home(request):
     <div class="container" id="main-container">
         <div class="left-column">
             <h1>🗺️ My Tracks - OwnTracks Backend</h1>
-            <p class="status" id="server-status">🔄 Checking server status...</p>
             <p>A backend server for the OwnTracks Android/iOS app.</p>
 
             <h2>🌐 Network Access</h2>
@@ -582,6 +580,24 @@ def home(request):
             }}
             
             pendingRestoreState = null;
+        }}
+
+        // Date formatting helper
+        function formatDateForTitle(date) {{
+            const options = {{ weekday: 'short', month: 'short', day: 'numeric' }};
+            return date.toLocaleDateString('en-US', options);
+        }}
+
+        function getDateRangeText(hours) {{
+            const now = new Date();
+            const startDate = new Date(now.getTime() - hours * 60 * 60 * 1000);
+            
+            // If same day, just show one date
+            if (startDate.toDateString() === now.toDateString()) {{
+                return formatDateForTitle(now);
+            }}
+            // Otherwise show range
+            return `${{formatDateForTitle(startDate)}} - ${{formatDateForTitle(now)}}`;
         }}
 
         // Theme management
@@ -886,7 +902,7 @@ def home(request):
             }}
 
             try {{
-                const response = await fetch(`/api/locations/?device=${{selectedDevice}}&start_time=${{Math.floor(startTime)}}&limit=1000`);;
+                const response = await fetch(`/api/locations/?device=${{selectedDevice}}&start_time=${{Math.floor(startTime)}}&ordering=-timestamp&limit=1000`);
                 if (!response.ok) return;
 
                 const data = await response.json();
@@ -1070,11 +1086,15 @@ def home(request):
         document.getElementById('time-range-selector').addEventListener('change', (e) => {{
             timeRangeHours = parseInt(e.target.value);
 
+            // Update title with new date range
+            const dateRangeText = getDateRangeText(timeRangeHours);
+            document.getElementById('activity-title').textContent = `📅 Historic Trail - ${{dateRangeText}}`;
+
             // Fit bounds when changing time range
             needsFitBounds = true;
 
             // Refresh trail with new time range (only in historic mode)
-            if (!isLiveMode && selectedDevice) {{
+            if (!isLiveMode) {{
                 fetchAndDisplayTrail();
             }}
 
@@ -1090,8 +1110,9 @@ def home(request):
             document.getElementById('live-mode-btn').classList.add('active');
             document.getElementById('historic-mode-btn').classList.remove('active');
             
-            // Update title
-            document.getElementById('activity-title').textContent = '📍 Live Activity';
+            // Update title with today's date
+            const todayText = formatDateForTitle(new Date());
+            document.getElementById('activity-title').textContent = `📍 Live Activity - ${{todayText}}`;
             document.getElementById('map-title').textContent = '🗺️ Live Map';
             
             // Hide historic controls
@@ -1099,8 +1120,9 @@ def home(request):
             document.getElementById('device-selector').classList.add('hidden');
             
             // Clear activity section for live updates
-            clearActivitySection('Waiting for location updates...');
+            clearActivitySection('Loading last hour of activity...');
             eventCount = 0;
+            lastTimestamp = null;  // Reset to allow fresh load
             
             // Clear selection and trails
             selectedDevice = '';
@@ -1111,12 +1133,12 @@ def home(request):
             }});
             deviceTrails = {{}};
             
-            // Show all device markers
-            Object.values(deviceMarkers).forEach(marker => {{
-                if (!map.hasLayer(marker)) {{
-                    marker.addTo(map);
-                }}
-            }});
+            // Clear device markers for fresh load
+            Object.values(deviceMarkers).forEach(marker => marker.remove());
+            deviceMarkers = {{}};
+            
+            // Load last hour of activity data
+            loadLiveActivityHistory();
 
             // Save UI state
             saveUIState();
@@ -1133,9 +1155,10 @@ def home(request):
             document.getElementById('live-mode-btn').classList.remove('active');
             document.getElementById('historic-mode-btn').classList.add('active');
             
-            // Update title
+            // Update title with date range
+            const dateRangeText = getDateRangeText(timeRangeHours);
             document.getElementById('map-title').textContent = '🗺️ Historic Map';
-            document.getElementById('activity-title').textContent = '📅 Historic Trail';
+            document.getElementById('activity-title').textContent = `📅 Historic Trail - ${{dateRangeText}}`;
             
             // Show historic controls
             document.getElementById('time-range-selector').classList.remove('hidden');
@@ -1174,17 +1197,12 @@ def home(request):
         }}
 
         function updateServerStatus(connected) {{
-            const statusEl = document.getElementById('server-status');
             const statusDot = document.getElementById('status-dot');
             const statusText = document.getElementById('status-text');
             if (connected) {{
-                statusEl.innerHTML = '✅ Server is running!';
-                statusEl.style.color = 'var(--status-color)';
                 statusDot.className = 'status-dot connected';
                 statusText.textContent = 'Connected';
             }} else {{
-                statusEl.innerHTML = '❌ Server disconnected!';
-                statusEl.style.color = '#dc3545';
                 statusDot.className = 'status-dot disconnected';
                 statusText.textContent = 'Disconnected';
             }}
@@ -1214,13 +1232,24 @@ def home(request):
 
         document.getElementById('reset-button').addEventListener('click', resetEvents);
 
-        function formatTime(timestamp) {{
+        function formatTime(timestamp, includeDate = false) {{
             const date = new Date(timestamp * 1000);
+            const today = new Date();
+            const isToday = date.toDateString() === today.toDateString();
+            
             const hours = String(date.getHours()).padStart(2, '0');
             const minutes = String(date.getMinutes()).padStart(2, '0');
             const seconds = String(date.getSeconds()).padStart(2, '0');
             const ms = String(date.getMilliseconds()).padStart(3, '0');
-            return `${{hours}}:${{minutes}}:${{seconds}}.${{ms}}`;
+            const timeStr = `${{hours}}:${{minutes}}:${{seconds}}.${{ms}}`;
+            
+            // Include date if requested or if not today
+            if (includeDate || !isToday) {{
+                const month = date.toLocaleDateString('en-US', {{ month: 'short' }});
+                const day = date.getDate();
+                return `${{month}} ${{day}} ${{timeStr}}`;
+            }}
+            return timeStr;
         }}
 
         // Clear activity section and show a message
@@ -1241,15 +1270,14 @@ def home(request):
                 return;
             }}
             
-            // Display in chronological order (oldest first, matching map waypoint numbers)
-            const chronological = [...locations].reverse();
-            
-            chronological.forEach((loc, index) => {{
-                const waypointNumber = index + 1;
+            // Display in reverse chronological order (newest first at top)
+            // API returns newest first with ordering=-timestamp
+            locations.forEach((loc, index) => {{
+                const waypointNumber = locations.length - index;  // Oldest = #1, newest = #N
                 const entry = document.createElement('div');
                 entry.className = 'log-entry';
                 
-                const time = formatTime(loc.timestamp_unix);
+                const time = formatTime(loc.timestamp_unix, true);  // Always show date in historic view
                 const lat = parseFloat(loc.latitude).toFixed(6);
                 const lon = parseFloat(loc.longitude).toFixed(6);
                 const acc = loc.accuracy || 'N/A';
@@ -1275,7 +1303,7 @@ def home(request):
             const entry = document.createElement('div');
             entry.className = 'log-entry';
 
-            const time = formatTime(location.timestamp_unix);
+            const time = formatTime(location.timestamp_unix, true);  // Show date for context
             const device = location.device_name || 'Unknown';
             const deviceId = location.device_id_display || 'N/A';
             const trackerId = location.tid_display || '';
@@ -1307,17 +1335,84 @@ def home(request):
                 }});
             }}
 
-            // Keep only last 50 entries
-            while (container.children.length > 50) {{
+            // Keep only last 100 entries (1 hour worth at typical update rates)
+            while (container.children.length > 100) {{
                 container.removeChild(container.lastChild);
             }}
 
             eventCount++;
-            document.getElementById('log-count').textContent = eventCount + ' event' + (eventCount !== 1 ? 's' : '');
+            document.getElementById('log-count').textContent = eventCount + ' event' + (eventCount !== 1 ? 's' : '') + ' (last hour)';
 
             // Update map marker
             if (map) {{
                 updateDeviceMarker(location);
+            }}
+        }}
+
+        // Load last hour of live activity data
+        async function loadLiveActivityHistory() {{
+            const now = Date.now() / 1000;
+            const oneHourAgo = now - 3600;  // 1 hour in seconds
+            
+            try {{
+                const response = await fetch(`/api/locations/?start_time=${{Math.floor(oneHourAgo)}}&ordering=-timestamp&limit=100`);
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                const locations = data.results || [];
+                
+                if (locations.length === 0) {{
+                    return;
+                }}
+                
+                const container = document.getElementById('log-container');
+                const loading = document.getElementById('loading');
+                if (loading) loading.remove();
+                
+                // Display locations (already newest first from API)
+                locations.forEach((loc, index) => {{
+                    const entry = document.createElement('div');
+                    entry.className = 'log-entry';
+                    
+                    const time = formatTime(loc.timestamp_unix, true);  // Show date for context
+                    const device = loc.device_name || 'Unknown';
+                    const deviceId = loc.device_id_display || 'N/A';
+                    const trackerId = loc.tid_display || '';
+                    const lat = parseFloat(loc.latitude).toFixed(6);
+                    const lon = parseFloat(loc.longitude).toFixed(6);
+                    const acc = loc.accuracy || 'N/A';
+                    const alt = loc.altitude || 0;
+                    const vel = loc.velocity || 0;
+                    const batt = loc.battery_level || 'N/A';
+                    const conn = loc.connection_type === 'w' ? 'WiFi' : loc.connection_type === 'm' ? 'Mobile' : 'N/A';
+                    const ip = loc.ip_address || 'N/A';
+                    
+                    let deviceDisplay = device;
+                    if (trackerId) {{
+                        deviceDisplay = `${{device}} (${{trackerId}})`;
+                    }} else if (device !== deviceId) {{
+                        deviceDisplay = `${{device}} (${{deviceId}})`;
+                    }}
+                    
+                    entry.innerHTML = `<span class="log-time">${{time}}</span> | <span class="log-device">${{deviceDisplay}}</span> | <span class="log-ip">${{ip}}</span> | <span class="log-coords">${{lat}}, ${{lon}}</span> | <span class="log-meta">acc:${{acc}}m alt:${{alt}}m vel:${{vel}}km/h batt:${{batt}}% ${{conn}}</span>`;
+                    
+                    container.appendChild(entry);
+                    
+                    // Update device marker (only for latest position of each device)
+                    if (index === 0 || !deviceMarkers[device]) {{
+                        updateDeviceMarker(loc);
+                    }}
+                }});
+                
+                eventCount = locations.length;
+                document.getElementById('log-count').textContent = eventCount + ' event' + (eventCount !== 1 ? 's' : '') + ' (last hour)';
+                
+                // Track the newest timestamp for incremental updates
+                if (locations.length > 0) {{
+                    lastTimestamp = locations[0].timestamp_unix;
+                }}
+            }} catch (error) {{
+                console.error('Error loading live activity history:', error);
             }}
         }}
 
