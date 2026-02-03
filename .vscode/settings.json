@@ -28,6 +28,7 @@
     "uv": true,
     "git checkout": true,
     "git pull": true,
-    "shellcheck": true
+    "shellcheck": true,
+    "gt": true
   }
 }
