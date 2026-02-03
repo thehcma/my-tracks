@@ -10,6 +10,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 from pathlib import Path
+from typing import Any
 
 from decouple import config
 
@@ -152,15 +153,15 @@ import time
 TRACE_LEVEL = 5
 logging.addLevelName(TRACE_LEVEL, 'TRACE')
 
-def trace(self, message, *args, **kwargs):
+def trace(self: logging.Logger, message: str, *args: object, **kwargs: Any) -> None:
     if self.isEnabledFor(TRACE_LEVEL):
         self._log(TRACE_LEVEL, message, args, **kwargs)
 
-logging.Logger.trace = trace
+logging.Logger.trace = trace  # type: ignore[attr-defined]
 
 # Custom filter to set health check requests to TRACE level
 class HealthCheckFilter(logging.Filter):
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
         # Check if this is a health check request
         if hasattr(record, 'msg') and '/health/' in str(record.msg):
             record.levelno = TRACE_LEVEL
@@ -169,7 +170,7 @@ class HealthCheckFilter(logging.Filter):
 
 # Custom formatter that uses local time instead of UTC
 class LocalTimeFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """Override formatTime to use local time instead of UTC."""
         ct = self.converter(record.created)
         if datefmt:

@@ -44,6 +44,11 @@ jobs:
     - name: Check import sorting with isort
       run: uv run isort --check-only --diff tracker mytracks
 
+    - name: Check type annotations with Pyright
+      run: |
+        uv run pyright
+        echo "✅ All type annotations are complete and correct"
+
     - name: Check for pending migrations
       run: |
         uv run python manage.py makemigrations --check --dry-run

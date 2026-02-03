@@ -266,7 +266,7 @@ class LocationSerializer(serializers.ModelSerializer):
 
         return transformed
 
-    def create(self, validated_data):
+    def create(self, validated_data: dict[str, Any]) -> Location:
         """Create location instance with IP address from context."""
         # Get IP address from context if available
         client_ip = self.context.get('client_ip')
