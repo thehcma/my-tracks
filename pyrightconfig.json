@@ -6,6 +6,9 @@
   "reportMissingImports": true,
   "reportMissingTypeStubs": false,
   "reportAttributeAccessIssue": "none",
+  "reportMissingParameterType": "error",
+  "reportMissingTypeArgument": "warning",
+  "reportUnknownParameterType": "warning",
   "pythonVersion": "3.14",
   "pythonPlatform": "Darwin",
   "typeCheckingMode": "basic"
