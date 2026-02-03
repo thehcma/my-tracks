@@ -1,0 +1,63 @@
+name: Cleanup Stale Graphite Branches
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual trigger
+
+jobs:
+  cleanup-stale-branches:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Cleanup all stale graphite-base branches
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "🔍 Finding all graphite-base branches..."
+        
+        # Get all branches matching graphite-base/*
+        BRANCHES=$(gh api repos/${{ github.repository }}/git/refs/heads/graphite-base --jq '.[].ref' 2>/dev/null || echo "")
+        
+        if [ -z "$BRANCHES" ]; then
+          echo "ℹ️ No graphite-base branches found"
+          exit 0
+        fi
+        
+        echo "Found branches:"
+        echo "$BRANCHES"
+        echo ""
+        
+        DELETED=0
+        KEPT=0
+        
+        for REF in $BRANCHES; do
+          # Extract PR number from refs/heads/graphite-base/123
+          PR_NUMBER=$(echo "$REF" | sed 's|refs/heads/graphite-base/||')
+          
+          echo "Checking PR #${PR_NUMBER}..."
+          
+          # Check if PR exists and is merged
+          PR_STATE=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER} --jq '.state' 2>/dev/null || echo "not_found")
+          PR_MERGED=$(gh api repos/${{ github.repository }}/pulls/${PR_NUMBER} --jq '.merged' 2>/dev/null || echo "false")
+          
+          if [ "$PR_STATE" = "closed" ] && [ "$PR_MERGED" = "true" ]; then
+            echo "  PR #${PR_NUMBER} is merged, deleting branch..."
+            gh api repos/${{ github.repository }}/git/${REF} -X DELETE
+            echo "  ✅ Deleted graphite-base/${PR_NUMBER}"
+            DELETED=$((DELETED + 1))
+          elif [ "$PR_STATE" = "not_found" ]; then
+            echo "  PR #${PR_NUMBER} not found, deleting orphan branch..."
+            gh api repos/${{ github.repository }}/git/${REF} -X DELETE
+            echo "  ✅ Deleted orphan graphite-base/${PR_NUMBER}"
+            DELETED=$((DELETED + 1))
+          else
+            echo "  PR #${PR_NUMBER} is still open, keeping branch"
+            KEPT=$((KEPT + 1))
+          fi
+        done
+        
+        echo ""
+        echo "📊 Summary: Deleted ${DELETED} branches, kept ${KEPT} branches"
