@@ -1,0 +1,29 @@
+name: Cleanup Graphite Branch on PR Merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  cleanup-merged-pr:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Delete graphite-base branch for merged PR
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        PR_NUMBER=${{ github.event.pull_request.number }}
+        BRANCH_NAME="graphite-base/${PR_NUMBER}"
+        
+        echo "Checking if branch ${BRANCH_NAME} exists..."
+        
+        # Check if the branch exists
+        if gh api repos/${{ github.repository }}/git/refs/heads/${BRANCH_NAME} --silent 2>/dev/null; then
+          echo "Deleting branch ${BRANCH_NAME}..."
+          gh api repos/${{ github.repository }}/git/refs/heads/${BRANCH_NAME} -X DELETE
+          echo "✅ Deleted ${BRANCH_NAME}"
+        else
+          echo "ℹ️ Branch ${BRANCH_NAME} does not exist, nothing to clean up"
+        fi
