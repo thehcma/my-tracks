@@ -8,7 +8,7 @@ import logging
 import socket
 
 from django.contrib import admin
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.urls import include, path
 from django.urls.resolvers import URLPattern, URLResolver
 
@@ -53,12 +53,12 @@ class NetworkState:
         return current_ip, has_changed
 
 
-def health(request):
+def health(request: HttpRequest) -> JsonResponse:
     """Health check endpoint."""
     return JsonResponse({'status': 'ok'})
 
 
-def network_info(request):
+def network_info(request: HttpRequest) -> JsonResponse:
     """Return current network information for dynamic UI updates."""
     local_ip, _ = NetworkState.check_and_update_ip()
     hostname = socket.gethostname()
@@ -70,7 +70,7 @@ def network_info(request):
     })
 
 
-def home(request):
+def home(request: HttpRequest) -> HttpResponse:
     """Home page with API information."""
     # Get local IP address
     try:
