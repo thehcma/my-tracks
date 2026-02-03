@@ -50,6 +50,7 @@ This document defines the four specialized agents for the OwnTracks Django backe
 - ✅ All tests passing
 - ✅ **90% minimum code coverage** (`uv run pytest --cov=tracker --cov-fail-under=90`)
 - ✅ **Pyright type checking passes** (`uv run pyright`) - enforces type annotation consistency
+- ✅ **All functions have complete type signatures** (parameters and return types)
 - ✅ **Imports sorted with isort** (`uv run isort --check-only tracker mytracks`)
 - ✅ No pytest warnings
 - ✅ VS Code Problems panel clear
