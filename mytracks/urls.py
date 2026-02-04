@@ -1390,8 +1390,16 @@ def home(request: HttpRequest) -> HttpResponse:
         document.getElementById('resolution-selector').addEventListener('change', (e) => {{
             trailResolution = parseInt(e.target.value);
 
-            // Refresh trail with new resolution (only in historic mode)
-            if (!isLiveMode) {{
+            // Refresh trail with new resolution
+            if (isLiveMode) {{
+                // Clear existing trails and reload
+                Object.values(deviceTrails).forEach(trail => {{
+                    if (trail.polyline) trail.polyline.remove();
+                    if (trail.markers) trail.markers.forEach(m => m.remove());
+                }});
+                deviceTrails = {{}};
+                loadLiveActivityHistory();
+            }} else {{
                 fetchAndDisplayTrail();
             }}
 
@@ -1413,10 +1421,10 @@ def home(request: HttpRequest) -> HttpResponse:
             document.getElementById('activity-title').textContent = `📍 Live Activity - ${{todayText}}`;
             document.getElementById('map-title').textContent = '🗺️ Live Map';
 
-            // Hide historic-only controls (time range, resolution) but keep device selector visible
+            // Hide time range selector but keep resolution and device selector visible
             document.getElementById('time-range-selector').classList.add('hidden');
-            document.getElementById('resolution-selector').classList.add('hidden');
-            // Device selector stays visible in live mode
+            document.getElementById('resolution-selector').classList.remove('hidden');
+            // Resolution and device selectors stay visible in live mode
 
             // Clear activity section for live updates
             clearActivitySection('Loading last hour of activity...');
@@ -1704,6 +1712,10 @@ def home(request: HttpRequest) -> HttpResponse:
             let url = `/api/locations/?start_time=${{Math.floor(oneHourAgo)}}&ordering=-timestamp&limit=500`;
             if (selectedDevice) {{
                 url += `&device=${{selectedDevice}}`;
+            }}
+            // Apply resolution filtering (same as historic mode)
+            if (trailResolution > 0) {{
+                url += `&resolution=${{trailResolution}}`;
             }}
 
             try {{
