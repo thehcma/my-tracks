@@ -6,7 +6,7 @@ from channels.layers import get_channel_layer
 from channels.testing import WebsocketCommunicator
 from hamcrest import assert_that, equal_to, has_key, is_not, none
 
-from mytracks.asgi import application
+from config.asgi import application
 
 
 @pytest.mark.django_db

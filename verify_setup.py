@@ -126,7 +126,7 @@ class SetupVerifier:
 
             # Try to setup Django
             import os
-            os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mytracks.settings')
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
             django.setup()
 
             self.success.append("✓ Django configured correctly")

@@ -1,5 +1,5 @@
 """
-ASGI config for mytracks project.
+ASGI config for my_tracks project.
 
 It exposes the ASGI callable as a module-level variable named ``application``.
 
@@ -16,7 +16,7 @@ from django.core.asgi import get_asgi_application
 
 from tracker.routing import websocket_urlpatterns
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mytracks.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
 # Initialize Django ASGI application early to ensure the AppRegistry
 # is populated before importing code that may import ORM models.
