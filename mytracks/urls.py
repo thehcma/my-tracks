@@ -589,27 +589,38 @@ def home(request: HttpRequest) -> HttpResponse:
         let needsFitBounds = true; // Only fit bounds on initial trail load
         let isRestoringState = false; // Flag to prevent saving during restore
 
-        // Device color palette - visually distinct colors for different devices
+        // Device color palette - high contrast colors visible against map backgrounds
+        // Avoids light yellows, grays, and greens that blend with roads, parks, terrain
         const deviceColors = [
-            '#007bff', // Blue
-            '#dc3545', // Red
-            '#28a745', // Green
-            '#fd7e14', // Orange
-            '#6f42c1', // Purple
-            '#20c997', // Teal
-            '#e83e8c', // Pink
-            '#17a2b8', // Cyan
-            '#ffc107', // Yellow
-            '#6c757d'  // Gray
+            '#0056b3', // Dark Blue - visible against all terrain
+            '#c82333', // Dark Red - high contrast
+            '#6f42c1', // Purple - stands out on any map
+            '#d63384', // Magenta - visible against greens
+            '#e65100', // Dark Orange - visible against blue water
+            '#0d6efd', // Bright Blue - good contrast
+            '#9c27b0', // Deep Purple - unique, visible
+            '#00695c', // Dark Teal - visible against light areas
+            '#b71c1c', // Deep Red - high visibility
+            '#1565c0'  // Royal Blue - stands out
         ];
         let deviceColorMap = {{}};  // Maps device name to color
-        let nextColorIndex = 0;
 
-        // Get or assign a color to a device
+        // Hash function for consistent color assignment based on device identifier
+        function hashString(str) {{
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {{
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32bit integer
+            }}
+            return Math.abs(hash);
+        }}
+
+        // Get consistent color for a device based on hash of device name
         function getDeviceColor(deviceName) {{
             if (!deviceColorMap[deviceName]) {{
-                deviceColorMap[deviceName] = deviceColors[nextColorIndex % deviceColors.length];
-                nextColorIndex++;
+                const hash = hashString(deviceName);
+                deviceColorMap[deviceName] = deviceColors[hash % deviceColors.length];
             }}
             return deviceColorMap[deviceName];
         }}
@@ -887,6 +898,12 @@ def home(request: HttpRequest) -> HttpResponse:
                     fillOpacity: 0.9
                 }}).addTo(map);
                 marker.bindPopup(getPopupContent(location));
+                // Add tooltip showing device name on hover
+                marker.bindTooltip(deviceName, {{
+                    permanent: false,
+                    direction: 'top',
+                    offset: [0, -10]
+                }});
                 deviceMarkers[deviceName] = marker;
             }}
 
