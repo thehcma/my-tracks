@@ -9,15 +9,15 @@
 #   --port PORT          Set server port (default: 8080, testing: 18080)
 #   --log-level LEVEL    Set Django log level (trace, debug, info, warning, error, critical)
 #                        Default: warning
-#   --console            Output logs to console instead of file
+#   --console            Output logs to console in addition to file (dual logging)
 #   -h, --help           Show this help message
 #
 # Examples:
-#   ./my-tracks-server                    # Start with default (port 8080, warning level, file logging)
+#   ./my-tracks-server                    # Start with default (port 8080, warning level, file only)
 #   ./my-tracks-server --port 18080       # Start on port 18080 for testing
 #   ./my-tracks-server --log-level debug  # Debug level, logs to file
-#   ./my-tracks-server --console          # Warning level, logs to console
-#   ./my-tracks-server --port 18080 --log-level info --console  # Testing port, info level, console output
+#   ./my-tracks-server --console          # Warning level, logs to BOTH console AND file
+#   ./my-tracks-server --port 18080 --log-level info --console  # Testing port, info level, dual logging
 
 set -e
 
@@ -101,10 +101,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate port
-if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+# Validate port (0 = OS allocates ephemeral port)
+if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -gt 65535 ]; then
     echo "Error: Invalid port number: $port"
-    echo "Port must be a number between 1 and 65535"
+    echo "Port must be a number between 0 and 65535 (0 = OS allocates)"
     exit 1
 fi
 
@@ -191,28 +191,24 @@ else
     exit 1
 fi
 
-# Create logs directory if logging to file
-if [ "$log_to_console" = false ]; then
-    mkdir -p logs
+# Create logs directory and handle log rotation (always, for dual logging support)
+mkdir -p logs
+log_file="logs/my-tracks.log"
+
+# Rotate logs: keep last 5 files
+if [ -f "$log_file" ]; then
+    # Remove oldest log if we already have 5
+    [ -f "logs/my-tracks.log.5" ] && rm -f "logs/my-tracks.log.5"
     
-    # Rotate logs: keep last 5 files
-    log_file="logs/my-tracks.log"
+    # Shift logs: .4 -> .5, .3 -> .4, etc.
+    for i in 4 3 2 1; do
+        if [ -f "logs/my-tracks.log.$i" ]; then
+            mv "logs/my-tracks.log.$i" "logs/my-tracks.log.$((i + 1))"
+        fi
+    done
     
-    if [ -f "$log_file" ]; then
-        # Rotate existing logs
-        # Remove oldest log if we already have 5
-        [ -f "logs/my-tracks.log.5" ] && rm -f "logs/my-tracks.log.5"
-        
-        # Shift logs: .4 -> .5, .3 -> .4, etc.
-        for i in 4 3 2 1; do
-            if [ -f "logs/my-tracks.log.$i" ]; then
-                mv "logs/my-tracks.log.$i" "logs/my-tracks.log.$((i + 1))"
-            fi
-        done
-        
-        # Move current log to .1
-        mv "$log_file" "logs/my-tracks.log.1"
-    fi
+    # Move current log to .1
+    mv "$log_file" "logs/my-tracks.log.1"
 fi
 
 # Export Django logging configuration
@@ -225,39 +221,84 @@ uv run python manage.py collectstatic --noinput --clear > /dev/null 2>&1
 # Get the local IP address
 local_ip=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "unknown")
 
-# Start server on specified port, bound to all interfaces for LAN access
-echo "🚀 Starting Django server on http://0.0.0.0:$port/"
-echo ""
-echo "📡 Network Access:"
-echo "   Local:   http://localhost:$port/"
-if [ "$local_ip" != "unknown" ]; then
-    echo "   Network: http://$local_ip:$port/"
-else
-    echo "   Network: Unable to determine IP address"
-fi
-echo ""
-echo "📝 Log level: $log_level"
+# For port 0, we'll detect the actual port after daphne starts
+display_port="$port"
+
+# Function to display server info (called after we know the actual port)
+display_server_info() {
+    local actual_port="$1"
+    echo "🚀 Starting Django server on http://0.0.0.0:$actual_port/"
+    echo ""
+    echo "📡 Network Access:"
+    echo "   Local:   http://localhost:$actual_port/"
+    if [ "$local_ip" != "unknown" ]; then
+        echo "   Network: http://$local_ip:$actual_port/"
+    else
+        echo "   Network: Unable to determine IP address"
+    fi
+    echo ""
+    echo "📝 Log level: $log_level"
+}
 
 if [ "$log_to_console" = true ]; then
-    echo "📺 Logging to: console"
+    if [ "$port" = "0" ]; then
+        echo "🔍 Requesting OS-allocated port..."
+        echo ""
+    fi
+    
+    # Start daphne with dual logging via tee
+    daphne -b 0.0.0.0 -p "$port" --verbosity 0 config.asgi:application 2>&1 | tee -a "$log_file" &
+    server_pid=$!
+    
+    # Wait for daphne to start and report the port
+    sleep 1
+    
+    # Detect actual port from log file if port was 0
+    if [ "$port" = "0" ]; then
+        detected_port=$(grep -o 'Listening on TCP address [0-9.]*:\([0-9]*\)' "$log_file" 2>/dev/null | head -1 | grep -o '[0-9]*$')
+        if [ -n "$detected_port" ]; then
+            display_port="$detected_port"
+        fi
+    fi
+    
+    # Show server info after we know the actual port
+    echo ""
+    display_server_info "$display_port"
+    echo "📺 Logging to: console + $log_file (dual mode)"
     echo ""
     echo "Press CTRL-C to stop the server"
     echo ""
-    daphne -b 0.0.0.0 -p "$port" --verbosity 0 config.asgi:application &
-    server_pid=$!
-    # Wait for the server process, ignoring the interrupt signal during wait
-    # The trap will handle cleanup
+    
+    # Wait for the server process
     wait $server_pid 2>/dev/null || true
 else
+    if [ "$port" = "0" ]; then
+        echo "🔍 Requesting OS-allocated port..."
+    fi
+    
+    # Start daphne in background, capturing output to log
+    daphne -b 0.0.0.0 -p "$port" --verbosity 0 config.asgi:application >> "$log_file" 2>&1 &
+    server_pid=$!
+    
+    # Wait for daphne to start and report the port
+    sleep 1
+    
+    # Detect actual port from log file if port was 0
+    if [ "$port" = "0" ]; then
+        detected_port=$(grep -o 'Listening on TCP address [0-9.]*:\([0-9]*\)' "$log_file" 2>/dev/null | head -1 | grep -o '[0-9]*$')
+        if [ -n "$detected_port" ]; then
+            display_port="$detected_port"
+        fi
+    fi
+    
+    display_server_info "$display_port"
     echo "📄 Logging to: $log_file"
-    echo "💡 Tip: Use --console flag to log to console instead"
+    echo "💡 Tip: Use --console flag to also see logs in terminal"
     echo ""
     echo "Press CTRL-C to stop the server"
     echo ""
-    daphne -b 0.0.0.0 -p "$port" --verbosity 0 config.asgi:application >> "$log_file" 2>&1 &
-    server_pid=$!
-    # Wait for the server process, ignoring the interrupt signal during wait
-    # The trap will handle cleanup
+    
+    # Wait for the server process
     wait $server_pid 2>/dev/null || true
 fi
 

@@ -23,6 +23,10 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Use port 0 to let the OS allocate an ephemeral port
+# This avoids conflicts with production server and between tests
+TEST_PORT=0
+
 test_help_message() {
     echo -n "Test: Help message displays... "
     if $SCRIPT --help > /dev/null 2>&1; then
@@ -68,7 +72,8 @@ test_valid_log_levels() {
         # Test that the script accepts the log level without error
         # We use a timeout and kill it quickly since we don't actually want to start the server
         # 5 second timeout needed due to collectstatic step
-        if ! timeout 5 $SCRIPT --log-level "$level" 2>&1 | grep -q "Log level: $(echo "$level" | tr '[:lower:]' '[:upper:]')"; then
+        # Use port 0 to let OS allocate ephemeral port
+        if ! timeout 5 $SCRIPT --port $TEST_PORT --log-level "$level" 2>&1 | grep -q "Log level: $(echo "$level" | tr '[:lower:]' '[:upper:]')"; then
             all_valid=false
             break
         fi
@@ -85,7 +90,8 @@ test_valid_log_levels() {
 
 test_console_flag() {
     echo -n "Test: Console flag works... "
-    if timeout 5 $SCRIPT --console 2>&1 | grep -q "Logging to: console"; then
+    # Use port 0 to let OS allocate ephemeral port
+    if timeout 5 $SCRIPT --port $TEST_PORT --console 2>&1 | grep -q "Logging to: console + logs/my-tracks.log"; then
         echo -e "${GREEN}✓ PASS${NC}"
         ((TESTS_PASSED++))
     else
@@ -96,7 +102,8 @@ test_console_flag() {
 
 test_file_logging() {
     echo -n "Test: File logging uses fixed log name... "
-    if timeout 5 $SCRIPT 2>&1 | grep -q "Logging to: logs/my-tracks.log"; then
+    # Use port 0 to let OS allocate ephemeral port
+    if timeout 5 $SCRIPT --port $TEST_PORT 2>&1 | grep -q "Logging to: logs/my-tracks.log"; then
         echo -e "${GREEN}✓ PASS${NC}"
         ((TESTS_PASSED++))
     else
@@ -117,7 +124,8 @@ test_log_rotation() {
     
     # Start server briefly to trigger rotation
     # Use 8 seconds to allow for collectstatic and server startup
-    timeout 8 $SCRIPT 2>&1 > /dev/null || true
+    # Use port 0 to let OS allocate ephemeral port
+    timeout 8 $SCRIPT --port $TEST_PORT 2>&1 > /dev/null || true
     
     # Check that old log was rotated to .1
     # The new my-tracks.log may or may not exist depending on whether daphne started logging
@@ -134,8 +142,10 @@ test_log_rotation() {
 }
 
 test_custom_port() {
-    echo -n "Test: Custom port (18080) accepted... "
-    if timeout 5 $SCRIPT --port 18080 2>&1 | grep -q "Starting Django server on http://0.0.0.0:18080/"; then
+    echo -n "Test: Port 0 (OS-allocated) accepted... "
+    # Use port 0 to let OS allocate ephemeral port
+    # Need --console to see daphne's output which shows the actual bound port
+    if timeout 5 $SCRIPT --port $TEST_PORT --console 2>&1 | grep -q "Listening on TCP address"; then
         echo -e "${GREEN}✓ PASS${NC}"
         ((TESTS_PASSED++))
     else

@@ -79,6 +79,9 @@ def home(request: HttpRequest) -> HttpResponse:
 
     hostname = socket.gethostname()
 
+    # Get the actual port from the request (handles port 0 case correctly)
+    server_port = request.META.get('SERVER_PORT', '8080')
+
     # Get coordinate precision from database schema
     # The Location model defines decimal_places for lat/lon fields
     # We use this to derive a sensible collapsing precision (~1 meter = 5 decimals)
@@ -91,6 +94,7 @@ def home(request: HttpRequest) -> HttpResponse:
     context = {
         'hostname': hostname,
         'local_ip': local_ip,
+        'server_port': server_port,
         'collapse_precision': collapse_precision,
     }
 
