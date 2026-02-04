@@ -239,7 +239,7 @@ if [ "$log_to_console" = true ]; then
     echo ""
     echo "Press CTRL-C to stop the server"
     echo ""
-    daphne -b 0.0.0.0 -p "$port" --verbosity 0 mytracks.asgi:application &
+    daphne -b 0.0.0.0 -p "$port" --verbosity 0 config.asgi:application &
     server_pid=$!
     # Wait for the server process, ignoring the interrupt signal during wait
     # The trap will handle cleanup
@@ -250,7 +250,7 @@ else
     echo ""
     echo "Press CTRL-C to stop the server"
     echo ""
-    daphne -b 0.0.0.0 -p "$port" --verbosity 0 mytracks.asgi:application >> "$log_file" 2>&1 &
+    daphne -b 0.0.0.0 -p "$port" --verbosity 0 config.asgi:application >> "$log_file" 2>&1 &
     server_pid=$!
     # Wait for the server process, ignoring the interrupt signal during wait
     # The trap will handle cleanup

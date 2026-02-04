@@ -1,5 +1,5 @@
 """
-Django settings for mytracks project.
+Django settings for my_tracks project.
 
 Generated for Django 5.0, using Python 3.12+.
 For more information on this file, see
@@ -55,7 +55,7 @@ MIDDLEWARE: list[str] = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF: str = 'mytracks.urls'
+ROOT_URLCONF: str = 'config.urls'
 
 TEMPLATES: list[dict[str, Any]] = [
     {
@@ -73,8 +73,8 @@ TEMPLATES: list[dict[str, Any]] = [
     },
 ]
 
-WSGI_APPLICATION: str = 'mytracks.wsgi.application'
-ASGI_APPLICATION: str = 'mytracks.asgi.application'
+WSGI_APPLICATION: str = 'config.wsgi.application'
+ASGI_APPLICATION: str = 'config.asgi.application'
 
 
 # Database
@@ -187,12 +187,12 @@ LOGGING = {
     'disable_existing_loggers': False,
     'filters': {
         'health_check_filter': {
-            '()': 'mytracks.settings.HealthCheckFilter',
+            '()': 'config.settings.HealthCheckFilter',
         },
     },
     'formatters': {
         'verbose': {
-            '()': 'mytracks.settings.LocalTimeFormatter',
+            '()': 'config.settings.LocalTimeFormatter',
             'format': '%(asctime)s.%(msecs)03d %(levelname)-7s %(module)s %(message)s',
             'datefmt': '%Y%m%d-%H:%M:%S',
         },

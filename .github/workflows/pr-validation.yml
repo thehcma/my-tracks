@@ -42,7 +42,7 @@ jobs:
       run: ./test-my-tracks-server
     
     - name: Check import sorting with isort
-      run: uv run isort --check-only --diff tracker mytracks
+      run: uv run isort --check-only --diff tracker config
 
     - name: Check type annotations with Pyright
       run: |
