@@ -43,6 +43,7 @@ INSTALLED_APPS: list[str] = [
     'rest_framework',
     'channels',
     'my_tracks.apps.MyTracksConfig',
+    'web_ui.apps.WebUiConfig',
 ]
 
 MIDDLEWARE: list[str] = [
