@@ -1799,6 +1799,9 @@ def home(request: HttpRequest) -> HttpResponse:
                 const loading = document.getElementById('loading');
                 if (loading) loading.remove();
 
+                // Clear existing entries before repopulating
+                container.innerHTML = '';
+
                 // Group locations by device for trail drawing
                 const locationsByDevice = {{}};
 
@@ -1895,6 +1898,8 @@ def home(request: HttpRequest) -> HttpResponse:
         // WebSocket connection for real-time updates
         let ws = null;
         let wsReconnectAttempts = 0;
+        let liveUpdateDebounceTimer = null;
+        const liveUpdateDebounceDelay = 500;  // 500ms debounce for trail updates
         const maxReconnectAttempts = 5;
         const reconnectDelay = 3000;
         let serverStartupTimestamp = null;  // Track server version
@@ -1949,12 +1954,16 @@ def home(request: HttpRequest) -> HttpResponse:
                                 return;
                             }}
 
-                            // Add to activity log
-                            addLogEntry(location);
-
-                            // Reload trails to include new waypoint with proper numbering
-                            // This respects resolution filter and redraws numbered waypoints
-                            loadLiveActivityHistory();
+                            // Debounce trail reload to prevent rapid consecutive API calls
+                            // loadLiveActivityHistory() clears and repopulates the log, so we
+                            // don't need to call addLogEntry() here - it would just be overwritten
+                            if (liveUpdateDebounceTimer) {{
+                                clearTimeout(liveUpdateDebounceTimer);
+                            }}
+                            liveUpdateDebounceTimer = setTimeout(() => {{
+                                loadLiveActivityHistory();
+                                liveUpdateDebounceTimer = null;
+                            }}, liveUpdateDebounceDelay);
                         }}
                     }} catch (error) {{
                         console.error('Error parsing WebSocket message:', error);
