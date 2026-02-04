@@ -1940,7 +1940,21 @@ def home(request: HttpRequest) -> HttpResponse:
 
                         // Only process messages in live mode
                         if (isLiveMode && message.type === 'location' && message.data) {{
-                            addLogEntry(message.data);
+                            const location = message.data;
+                            const deviceName = location.device_name || 'Unknown';
+
+                            // Check if we should display this location based on device filter
+                            if (selectedDevice && deviceName !== selectedDevice) {{
+                                console.log(`Ignoring location from ${{deviceName}} (filter: ${{selectedDevice}})`);
+                                return;
+                            }}
+
+                            // Add to activity log
+                            addLogEntry(location);
+
+                            // Reload trails to include new waypoint with proper numbering
+                            // This respects resolution filter and redraws numbered waypoints
+                            loadLiveActivityHistory();
                         }}
                     }} catch (error) {{
                         console.error('Error parsing WebSocket message:', error);
