@@ -320,12 +320,19 @@ function restoreUIState(): void {
         }
     }
 
-    // Restore resolution
+    // Restore resolution (slider value 0-100)
     if (state.trailResolution !== undefined) {
         trailResolution = state.trailResolution;
-        const resolutionSelector = document.getElementById('resolution-selector') as HTMLSelectElement;
-        if (resolutionSelector) {
-            resolutionSelector.value = String(trailResolution);
+        const precisionSlider = document.getElementById('precision-slider') as HTMLInputElement;
+        const precisionValue = document.getElementById('precision-value');
+        if (precisionSlider) {
+            // Convert resolution (0-360) to slider percentage (100-0)
+            // 0 (precise) -> 100%, 360 (coarse) -> 0%
+            const sliderValue = Math.round((1 - trailResolution / 360) * 100);
+            precisionSlider.value = String(sliderValue);
+            if (precisionValue) {
+                precisionValue.textContent = `${sliderValue}%`;
+            }
         }
     }
 
@@ -424,10 +431,10 @@ function setSidebarState(collapsed: boolean): void {
     const toggle = document.getElementById('sidebar-toggle');
     if (collapsed) {
         container?.classList.add('sidebar-collapsed');
-        if (toggle) toggle.textContent = '▶';
+        if (toggle) toggle.textContent = '◀'; // Point left to expand (show sidebar)
     } else {
         container?.classList.remove('sidebar-collapsed');
-        if (toggle) toggle.textContent = '◀';
+        if (toggle) toggle.textContent = '▶'; // Point right to collapse (hide sidebar)
     }
     localStorage.setItem('sidebar-collapsed', String(collapsed));
     // Invalidate map size after transition
@@ -1417,10 +1424,10 @@ function switchToLiveMode(): void {
         mapTitle.textContent = '🗺️ Live Map';
     }
 
-    // Hide time range selector but keep resolution and device selector visible
+    // Hide time range selector but keep precision slider and device selector visible
     document.getElementById('time-range-selector')?.classList.add('hidden');
-    document.getElementById('resolution-selector')?.classList.remove('hidden');
-    // Resolution and device selectors stay visible in live mode
+    document.getElementById('precision-slider-container')?.classList.remove('hidden');
+    // Precision slider and device selectors stay visible in live mode
 
     // Clear activity section for live updates
     clearActivitySection('Loading last hour of activity...');
@@ -1473,7 +1480,7 @@ function switchToHistoricMode(): void {
 
     // Show historic controls
     document.getElementById('time-range-selector')?.classList.remove('hidden');
-    document.getElementById('resolution-selector')?.classList.remove('hidden');
+    document.getElementById('precision-slider-container')?.classList.remove('hidden');
     document.getElementById('device-selector')?.classList.remove('hidden');
 
     // Clear markers (will be restored by fetchAndDisplayTrail)
@@ -1901,13 +1908,24 @@ function initEventListeners(): void {
         });
     }
 
-    // Resolution selector
-    const resolutionSelector = document.getElementById('resolution-selector') as HTMLSelectElement | null;
-    if (resolutionSelector) {
-        resolutionSelector.addEventListener('change', (e: Event) => {
-            trailResolution = parseInt((e.target as HTMLSelectElement).value);
+    // Precision slider (0% = coarse/360, 100% = precise/0)
+    const precisionSlider = document.getElementById('precision-slider') as HTMLInputElement | null;
+    const precisionValueDisplay = document.getElementById('precision-value');
+    if (precisionSlider) {
+        precisionSlider.addEventListener('input', (e: Event) => {
+            const sliderValue = parseInt((e.target as HTMLInputElement).value);
+            // Convert slider percentage (0-100) to resolution (360-0)
+            // 0% = 360 (coarse), 100% = 0 (precise)
+            trailResolution = Math.round((1 - sliderValue / 100) * 360);
 
-            // Refresh trail with new resolution
+            // Update display
+            if (precisionValueDisplay) {
+                precisionValueDisplay.textContent = `${sliderValue}%`;
+            }
+        });
+
+        precisionSlider.addEventListener('change', () => {
+            // Refresh trail with new resolution on release
             if (isLiveMode) {
                 // Clear existing trails and reload
                 Object.values(deviceTrails).forEach(trail => {
