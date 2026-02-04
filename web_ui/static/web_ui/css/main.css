@@ -83,28 +83,28 @@ body {
 
 .container {
     display: grid;
-    grid-template-columns: 1fr 3fr;
+    grid-template-columns: 3fr 1fr;
     height: 100vh;
     gap: 0;
 }
 
 .left-column {
+    background: var(--bg-left);
+    color: var(--text-left);
+    padding: 20px;
+    overflow-y: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.right-column {
     padding: 20px 40px;
     overflow-y: auto;
     background: var(--bg-main);
     color: var(--text-main);
     transition: padding 0.3s ease, opacity 0.3s ease;
-}
-
-.right-column {
-    background: var(--bg-left);
-    color: var(--text-left);
-    padding: 20px;
-    overflow-y: hidden;
     border-left: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    gap: 0;
 }
 
 h1 {
@@ -117,7 +117,7 @@ h2 {
     margin-top: 30px;
 }
 
-.right-column h2 {
+.left-column h2 {
     color: var(--right-header-color);
     margin-top: 0;
 }
@@ -305,10 +305,10 @@ a:hover {
 }
 
 .container.sidebar-collapsed {
-    grid-template-columns: 0fr 1fr;
+    grid-template-columns: 1fr 0fr;
 }
 
-.container.sidebar-collapsed .left-column {
+.container.sidebar-collapsed .right-column {
     padding: 0;
     overflow: hidden;
     opacity: 0;
@@ -337,8 +337,7 @@ a:hover {
 }
 
 .device-selector,
-.time-range-selector,
-.resolution-selector {
+.time-range-selector {
     background: var(--endpoint-bg);
     color: var(--text-main);
     border: 1px solid var(--border-color);
@@ -346,6 +345,66 @@ a:hover {
     padding: 6px 12px;
     font-size: 12px;
     cursor: pointer;
+}
+
+.precision-slider-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--endpoint-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 10px;
+}
+
+.precision-slider {
+    width: 80px;
+    height: 6px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.precision-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.precision-slider::-webkit-slider-thumb:hover {
+    background: #0056b3;
+}
+
+.precision-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s ease;
+}
+
+.precision-slider::-moz-range-thumb:hover {
+    background: #0056b3;
+}
+
+.precision-label {
+    font-size: 14px;
+}
+
+.precision-value {
+    font-size: 11px;
+    font-weight: bold;
+    min-width: 32px;
+    color: var(--text-main);
 }
 
 .mode-toggle {
