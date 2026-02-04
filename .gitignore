@@ -42,3 +42,4 @@ htmlcov/
 .pytype/
 .pyre/
 logs/
+*.backup-*
