@@ -181,6 +181,17 @@ class HealthCheckFilter(logging.Filter):
             record.levelname = 'TRACE'
         return True
 
+
+# Filter out confusing daphne "Configuring endpoint tcp:port=0" messages
+class DaphnePortZeroFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Transform the confusing "Configuring endpoint tcp:port=0" message
+        # to clarify that port 0 means OS-allocated ephemeral port
+        msg = str(getattr(record, 'msg', ''))
+        if 'Configuring endpoint tcp:port=0' in msg:
+            record.msg = 'Requesting OS-allocated ephemeral port (port=0)...'
+        return True
+
 # Custom formatter that uses local time instead of UTC
 class LocalTimeFormatter(logging.Formatter):
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
@@ -201,6 +212,9 @@ LOGGING = {
     'filters': {
         'health_check_filter': {
             '()': 'config.settings.HealthCheckFilter',
+        },
+        'daphne_port_zero_filter': {
+            '()': 'config.settings.DaphnePortZeroFilter',
         },
     },
     'formatters': {
@@ -230,6 +244,12 @@ LOGGING = {
         'django.server': {
             'handlers': ['console'],
             'level': TRACE_LEVEL,
+            'propagate': False,
+        },
+        'daphne.server': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'filters': ['daphne_port_zero_filter'],
             'propagate': False,
         },
     },

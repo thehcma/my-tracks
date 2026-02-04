@@ -19,9 +19,9 @@
             <div class="endpoint" id="network-info">
                 <p><strong>Hostname:</strong> <code id="network-hostname">{{ hostname }}</code></p>
                 <p><strong>Local IP:</strong> <code id="network-ip">{{ local_ip }}</code></p>
-                <p><strong>Port:</strong> <code>8080</code></p>
+                <p><strong>Port:</strong> <code>{{ server_port }}</code></p>
                 <p style="margin-top: 10px;">Access from other devices on your LAN:</p>
-                <p><code id="network-url">http://{{ local_ip }}:8080/</code></p>
+                <p><code id="network-url">http://{{ local_ip }}:{{ server_port }}/</code></p>
             </div>
 
             <h2>📍 API Endpoints</h2>
