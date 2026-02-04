@@ -21,8 +21,8 @@ jobs:
       run: |
         echo "🔍 Finding all branches..."
         
-        # Get all branches except main
-        BRANCHES=$(gh api repos/${{ github.repository }}/branches --paginate --jq '.[].name' | grep -v '^main$')
+        # Get all branches except main (use || true to handle case where only main exists)
+        BRANCHES=$(gh api repos/${{ github.repository }}/branches --paginate --jq '.[].name' | grep -v '^main$' || true)
         
         if [ -z "$BRANCHES" ]; then
           echo "ℹ️ No branches found (besides main)"
