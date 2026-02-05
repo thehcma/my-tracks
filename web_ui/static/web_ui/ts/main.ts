@@ -1990,6 +1990,10 @@ function switchToLiveMode(): void {
     document.getElementById('live-mode-btn')?.classList.add('active');
     document.getElementById('historic-mode-btn')?.classList.remove('active');
 
+    // Show live-mode-only buttons
+    document.getElementById('load-history-button')?.classList.remove('hidden');
+    document.getElementById('reset-button')?.classList.remove('hidden');
+
     // Hide device legend in live mode
     hideDeviceLegend();
 
@@ -2046,6 +2050,10 @@ function switchToHistoricMode(): void {
     // Update button states
     document.getElementById('live-mode-btn')?.classList.remove('active');
     document.getElementById('historic-mode-btn')?.classList.add('active');
+
+    // Hide live-mode-only buttons (they're not relevant in historic mode)
+    document.getElementById('load-history-button')?.classList.add('hidden');
+    document.getElementById('reset-button')?.classList.add('hidden');
 
     // Update title with date range
     const dateRangeText = getDateRangeText(timeRangeHours);
