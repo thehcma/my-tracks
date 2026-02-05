@@ -274,3 +274,4 @@ GRAPHITE_PROFILE=thehcma gt submit --no-interactive
 ```
 
 See [COMMANDS.md](COMMANDS.md#version-control-graphite) for the complete Graphite workflow.
+
