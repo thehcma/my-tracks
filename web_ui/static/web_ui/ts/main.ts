@@ -1280,12 +1280,19 @@ async function loadLiveActivityHistory(): Promise<void> {
         url += `&resolution=${trailResolution}`;
     }
 
+    console.log(`📍 loadLiveActivityHistory() fetching: ${url}`);
+
     try {
         const response = await fetch(url);
-        if (!response.ok) return;
+        if (!response.ok) {
+            console.log(`📍 loadLiveActivityHistory() failed: ${response.status}`);
+            return;
+        }
 
         const data: LocationsApiResponse = await response.json();
         const locations = data.results || [];
+
+        console.log(`📍 loadLiveActivityHistory() got ${locations.length} locations`);
 
         if (locations.length === 0) {
             return;
@@ -1392,6 +1399,10 @@ async function refreshLiveActivitySinceLastUpdate(): Promise<void> {
         // Add each new location (already in chronological order)
         locations.forEach(loc => {
             addLogEntry(loc);
+            // Update lastTimestamp to track what we've seen
+            if (loc.timestamp_unix && loc.timestamp_unix > (lastTimestamp || 0)) {
+                lastTimestamp = loc.timestamp_unix;
+            }
         });
     } catch (error) {
         console.error('Error refreshing live activity:', error);
@@ -1594,6 +1605,11 @@ function connectWebSocket(): void {
                         // First connection, store the version
                         serverStartupTimestamp = message.server_startup;
                         console.log('Server startup timestamp:', serverStartupTimestamp);
+                        // Refresh live data in case we missed anything during initial connection
+                        if (isLiveMode) {
+                            console.log('WebSocket first connection, refreshing live activity...');
+                            refreshLiveActivitySinceLastUpdate();
+                        }
                     } else if (serverStartupTimestamp !== message.server_startup) {
                         // Server has restarted, refresh the page
                         console.log(
@@ -1618,6 +1634,7 @@ function connectWebSocket(): void {
                 if (isLiveMode && message.type === 'location' && message.data) {
                     const location = message.data;
                     const deviceName = location.device_name || 'Unknown';
+                    console.log(`📍 Live mode location received from ${deviceName}`, location);
 
                     // Check if we should display this location based on device filter
                     if (selectedDevice && deviceName !== selectedDevice) {
@@ -1625,16 +1642,21 @@ function connectWebSocket(): void {
                         return;
                     }
 
+                    console.log(`📍 Scheduling live activity refresh (debounced ${liveUpdateDebounceDelay}ms)`);
                     // Debounce trail reload to prevent rapid consecutive API calls
                     // loadLiveActivityHistory() clears and repopulates the log, so we
                     // don't need to call addLogEntry() here - it would just be overwritten
                     if (liveUpdateDebounceTimer) {
                         clearTimeout(liveUpdateDebounceTimer);
+                        console.log('📍 Cleared existing debounce timer');
                     }
                     liveUpdateDebounceTimer = setTimeout(() => {
+                        console.log('📍 Debounce fired, calling loadLiveActivityHistory()');
                         loadLiveActivityHistory();
                         liveUpdateDebounceTimer = null;
                     }, liveUpdateDebounceDelay);
+                } else if (message.type === 'location') {
+                    console.log(`📍 Location received but not in live mode (isLiveMode=${isLiveMode})`);
                 }
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
