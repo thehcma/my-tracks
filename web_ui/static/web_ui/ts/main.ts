@@ -945,6 +945,7 @@ async function fetchAndDisplayTrail(): Promise<void> {
 
             // Show legend if 2-5 devices (after colors are assigned below)
             const deviceNames = Object.keys(locationsByDevice);
+            console.log('Device names for legend:', deviceNames, 'from locations:', locations.slice(0, 3).map(l => ({ device_name: l.device_name, device_id_display: l.device_id_display })));
 
             // Create trails and numbered waypoints for each device
             Object.entries(locationsByDevice).forEach(([deviceName, deviceLocations]) => {
