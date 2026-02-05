@@ -13,7 +13,7 @@ Quick reference for all commonly used commands.
 bash setup
 
 # Manual setup
-python3 install.py
+./install
 uv venv
 uv pip install -e .
 ```
@@ -22,7 +22,7 @@ uv pip install -e .
 
 ```bash
 # Verify setup
-python3 verify_setup.py
+./verify-setup
 
 # Check Python version
 uv run python --version

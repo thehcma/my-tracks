@@ -46,7 +46,7 @@ echo "✓ Directories created"
 
 echo ""
 echo "📦 Running installation script..."
-python3 install.py
+./install
 
 echo ""
 echo "🔧 Creating virtual environment..."
@@ -73,7 +73,7 @@ python manage.py migrate
 
 echo ""
 echo "🔍 Verifying setup..."
-python3 verify_setup.py
+./verify-setup
 
 echo ""
 echo "✅ Setup complete!"
