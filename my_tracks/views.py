@@ -152,6 +152,9 @@ class LocationViewSet(viewsets.ModelViewSet):
         channel_layer = get_channel_layer()
         if channel_layer:
             try:
+                logger.info(
+                    f"📡 Broadcasting location to WebSocket (id={location_data.get('id')}, device={location_data.get('device_id_display')})"
+                )
                 async_to_sync(channel_layer.group_send)(
                     "locations",
                     {
@@ -159,12 +162,8 @@ class LocationViewSet(viewsets.ModelViewSet):
                         "data": location_data
                     }
                 )
-                logger.debug(
-                    "WebSocket broadcast sent",
-                    extra={
-                        "location_id": location_data.get("id"),
-                        "device_id": location_data.get("device_id_display"),
-                    }
+                logger.info(
+                    f"✅ WebSocket broadcast completed for location {location_data.get('id')}"
                 )
             except Exception as e:
                 logger.error(
