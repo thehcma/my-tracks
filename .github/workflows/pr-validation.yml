@@ -2,7 +2,6 @@ name: PR Validation
 
 on:
   pull_request:
-    branches: [ main ]
   push:
     branches: [ main ]
 
@@ -12,6 +11,18 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        # For stacked PRs, fetch enough history to have the base branch
+        fetch-depth: 0
+        # Use the PR head ref to get the actual branch content
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+    
+    - name: Fetch base branch for stacked PRs
+      if: github.event_name == 'pull_request'
+      run: |
+        echo "PR base ref: ${{ github.event.pull_request.base.ref }}"
+        echo "PR head ref: ${{ github.event.pull_request.head.ref }}"
+        git fetch origin ${{ github.event.pull_request.base.ref }}:${{ github.event.pull_request.base.ref }} || true
     
     - name: Install uv
       uses: astral-sh/setup-uv@v5
