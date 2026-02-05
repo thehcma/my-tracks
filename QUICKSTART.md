@@ -33,7 +33,7 @@ This will:
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 2. Run the installation script
-python3 install.py
+./install
 
 # 3. Create virtual environment and install dependencies
 uv venv

@@ -84,7 +84,7 @@ This will:
 
 3. **Extract project files**:
    ```bash
-   python3 install.py
+   ./install
    ```
 
 4. **Create virtual environment and install dependencies**:

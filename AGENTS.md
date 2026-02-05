@@ -209,7 +209,24 @@ This document defines the four specialized agents for the OwnTracks Django backe
 **Python CLI Tools**:
 - **MUST use Typer** for command-line argument parsing instead of argparse
 - Use `Annotated` types with `typer.Option()` and `typer.Argument()` for clean, type-safe CLIs
-- Shebang: `#!/usr/bin/env -S uv run python` to use the project's virtual environment
+- Shebang: `#!/usr/bin/env python3` (standard, portable)
+- **MUST include auto-venv activation** so scripts work without manual venv activation:
+  ```python
+  # === Auto-activate virtual environment ===
+  import os
+  import sys
+  from pathlib import Path
+
+  def _activate_venv() -> None:
+      """Find and activate the project's virtual environment."""
+      script_dir = Path(__file__).resolve().parent
+      venv_python = script_dir / ".venv" / "bin" / "python"
+      if venv_python.exists() and sys.executable != str(venv_python):
+          os.execv(str(venv_python), [str(venv_python)] + sys.argv)
+
+  _activate_venv()
+  # === End auto-activate ===
+  ```
 - Use `typer.echo()` for output instead of `print()` for consistent behavior
 - Use `raise typer.Exit(code=1)` for error exits instead of `sys.exit()`
 - Example structure:
