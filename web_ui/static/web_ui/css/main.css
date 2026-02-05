@@ -232,6 +232,22 @@ a:hover {
     font-size: 12px;
 }
 
+.load-history-button {
+    background: #0d6efd;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.load-history-button:hover {
+    background: #0b5ed7;
+    transform: scale(1.05);
+}
+
 .reset-button {
     background: #dc3545;
     color: white;

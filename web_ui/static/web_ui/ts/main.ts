@@ -1672,6 +1672,155 @@ function resetEvents(): void {
     needsFitBounds = true;
 }
 
+/**
+ * Load last 30 minutes of data and continue with live updates.
+ * This disables skipHistoryFetch so normal live mode resumes after loading.
+ */
+async function loadLast30Minutes(): Promise<void> {
+    console.log('📍 loadLast30Minutes() called');
+
+    // Clear current state (like reset, but we'll load history)
+    const container = document.getElementById('log-container');
+    if (container) {
+        container.innerHTML = '<p id="loading">Loading last 30 minutes...</p>';
+    }
+    eventCount = 0;
+
+    // Clear device markers from the map
+    Object.values(deviceMarkers).forEach((marker) => marker.remove());
+    deviceMarkers = {};
+
+    // Clear trails from the map
+    Object.values(deviceTrails).forEach((trail) => {
+        if (trail.polyline) trail.polyline.remove();
+        if (trail.markers) trail.markers.forEach((m) => m.remove());
+    });
+    deviceTrails = {};
+
+    // Clear incremental locations
+    incrementalLocations = {};
+
+    // IMPORTANT: Disable skipHistoryFetch so we can load history and resume normal updates
+    skipHistoryFetch = false;
+
+    // Reset fit bounds flag so map will center on loaded data
+    needsFitBounds = true;
+
+    // Fetch last 30 minutes
+    const now = Date.now() / 1000;
+    const thirtyMinutesAgo = now - 1800; // 30 minutes in seconds
+
+    let url = `/api/locations/?start_time=${Math.floor(thirtyMinutesAgo)}&ordering=-timestamp&limit=500`;
+    if (selectedDevice) {
+        url += `&device=${selectedDevice}`;
+    }
+    if (trailResolution > 0) {
+        url += `&resolution=${trailResolution}`;
+    }
+
+    console.log(`📍 loadLast30Minutes() fetching: ${url}`);
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.log(`📍 loadLast30Minutes() failed: ${response.status}`);
+            if (container) {
+                container.innerHTML = '<p id="loading">Failed to load data. Waiting for updates...</p>';
+            }
+            return;
+        }
+
+        const data: LocationsApiResponse = await response.json();
+        const locations = data.results || [];
+
+        console.log(`📍 loadLast30Minutes() got ${locations.length} locations`);
+
+        if (locations.length === 0) {
+            if (container) {
+                container.innerHTML = '<p id="loading">No data in last 30 minutes. Waiting for updates...</p>';
+            }
+            const logCount = document.getElementById('log-count');
+            if (logCount) {
+                logCount.textContent = '0 events (last 30min)';
+            }
+            return;
+        }
+
+        if (!container) return;
+
+        const loading = document.getElementById('loading');
+        if (loading) loading.remove();
+
+        // Clear existing entries
+        container.innerHTML = '';
+
+        // Group locations by device for trail drawing
+        const locationsByDevice: Record<string, TrackLocation[]> = {};
+
+        // Display locations (already newest first from API)
+        locations.forEach((loc, index) => {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+
+            const time = formatTime(loc.timestamp_unix || 0, true);
+            const device = loc.device_name || 'Unknown';
+            const deviceId = loc.device_id_display || 'N/A';
+            const trackerId = loc.tid_display || '';
+            const lat = parseFloat(String(loc.latitude)).toFixed(6);
+            const lon = parseFloat(String(loc.longitude)).toFixed(6);
+            const acc = loc.accuracy || 'N/A';
+            const alt = loc.altitude || 0;
+            const vel = loc.velocity || 0;
+            const batt = loc.battery_level || 'N/A';
+            const conn = loc.connection_type === 'w' ? 'WiFi' : loc.connection_type === 'm' ? 'Mobile' : 'N/A';
+            const ip = loc.ip_address || 'N/A';
+
+            // Group locations by device for trail drawing
+            if (!locationsByDevice[device]) {
+                locationsByDevice[device] = [];
+            }
+            locationsByDevice[device].push(loc);
+
+            let deviceDisplay = device;
+            if (trackerId) {
+                deviceDisplay = `${device} (${trackerId})`;
+            } else if (device !== deviceId) {
+                deviceDisplay = `${device} (${deviceId})`;
+            }
+
+            // Add color indicator for device
+            const deviceColor = getDeviceColor(device);
+            entry.innerHTML = `<span class="log-time">${time}</span> | <span class="log-device" style="color:${deviceColor}">${deviceDisplay}</span> | <span class="log-ip">${ip}</span> | <span class="log-coords">${lat}, ${lon}</span> | <span class="log-meta">acc:${acc}m alt:${alt}m vel:${vel}km/h batt:${batt}% ${conn}</span>`;
+
+            container.appendChild(entry);
+
+            // Update device marker (only for latest position of each device)
+            if (index === 0 || !deviceMarkers[device]) {
+                updateDeviceMarker(loc);
+            }
+        });
+
+        // Draw trails for each device
+        drawLiveTrails(locationsByDevice);
+
+        eventCount = locations.length;
+        const logCount = document.getElementById('log-count');
+        if (logCount) {
+            logCount.textContent = eventCount + ' event' + (eventCount !== 1 ? 's' : '') + ' (last 30min)';
+        }
+
+        // Track the newest timestamp for incremental updates
+        if (locations.length > 0) {
+            lastTimestamp = locations[0].timestamp_unix || null;
+        }
+    } catch (error) {
+        console.error('Error loading last 30 minutes:', error);
+        if (container) {
+            container.innerHTML = '<p id="loading">Error loading data. Waiting for updates...</p>';
+        }
+    }
+}
+
 // ============================================================================
 // Live Activity
 // ============================================================================
@@ -2306,6 +2455,12 @@ function initEventListeners(): void {
     const resetButton = document.getElementById('reset-button');
     if (resetButton) {
         resetButton.addEventListener('click', resetEvents);
+    }
+
+    // Load history button
+    const loadHistoryButton = document.getElementById('load-history-button');
+    if (loadHistoryButton) {
+        loadHistoryButton.addEventListener('click', loadLast30Minutes);
     }
 
     // Device selector
