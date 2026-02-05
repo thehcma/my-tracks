@@ -23,10 +23,10 @@ Quick 5-minute setup guide with automated and manual options.
 ### [setup](setup)
 Automated setup script - run `bash setup` to set up everything.
 
-### [install.py](install.py)
+### [install](install)
 Python script to extract all project files from PROJECT_FILES.txt.
 
-### [verify_setup.py](verify_setup.py)
+### [verify-setup](verify-setup)
 Verification script to check if installation is complete and correct.
 
 ## 📚 API & Usage
@@ -161,14 +161,14 @@ See [AGENTS.md](AGENTS.md) for the development workflow and agent responsibiliti
 | pyproject.toml | Package config | Build tools |
 | manage.py | CLI | Developers |
 | setup | Auto setup | New users |
-| verify_setup.py | Setup verification | Everyone |
+| verify-setup | Setup verification | Everyone |
 | test_tracker.py | Test suite | Developers/QA |
 
 ## 🎯 Getting Help
 
 1. **Quick questions**: Check [COMMANDS.md](COMMANDS.md)
 2. **API usage**: See [API.md](API.md)
-3. **Setup issues**: Run `python3 verify_setup.py`
+3. **Setup issues**: Run `./verify-setup`
 4. **Deployment questions**: Read [DEPLOYMENT.md](DEPLOYMENT.md)
 5. **OwnTracks questions**: Visit https://owntracks.org/booklet/
 
@@ -186,7 +186,7 @@ All documentation follows these principles:
 When making changes:
 1. Update relevant documentation files
 2. Update this index if adding new docs
-3. Run verification: `python3 verify_setup.py`
+3. Run verification: `./verify-setup`
 4. Test any code examples in docs
 5. Update PROJECT_SUMMARY.md if architecture changes
 

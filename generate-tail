@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run python
+#!/usr/bin/env python3
 """
 Tail device generator for OwnTracks backend server.
 
@@ -15,6 +15,21 @@ Examples:
     ./generate-tail --direction north -o 5       # 5 km north
     ./generate-tail --offset-km 3.5 --dry-run    # Preview with 3.5 km offset
 """
+
+# === Auto-activate virtual environment ===
+import os
+import sys
+from pathlib import Path
+
+def _activate_venv() -> None:
+    """Find and activate the project's virtual environment."""
+    script_dir = Path(__file__).resolve().parent
+    venv_python = script_dir / ".venv" / "bin" / "python"
+    if venv_python.exists() and sys.executable != str(venv_python):
+        os.execv(str(venv_python), [str(venv_python)] + sys.argv)
+
+_activate_venv()
+# === End auto-activate ===
 
 import json
 import math

@@ -40,8 +40,8 @@ My Tracks OwnTracks backend server has been fully implemented and is ready for u
 
 5. **Setup & Configuration**
    - `setup` - Automated setup script (no .sh extension)
-   - `install.py` - File extraction utility
-   - `verify_setup.py` - Setup verification script
+   - `install` - File extraction utility (Typer CLI)
+   - `verify-setup` - Setup verification script (Typer CLI)
    - `.env.example` - Environment template
    - `.gitignore` - Git exclusions
    - `LICENSE` - PolyForm Noncommercial License 1.0.0
@@ -193,9 +193,8 @@ my-tracks/
 │   └── LICENSE
 ├── Scripts (4 files)
 │   ├── setup
-
-│   ├── install.py
-│   ├── verify_setup.py
+│   ├── install
+│   ├── verify-setup
 │   └── PROJECT_FILES.txt
 ├── Django Project (1 file + 5 in config/)
 │   ├── manage.py
