@@ -57,12 +57,13 @@ Implementing embedded MQTT broker for OwnTracks bidirectional communication.
    - Display MQTT host and port for OwnTracks app configuration
    - Updated OwnTracks setup instructions for both MQTT and HTTP modes
 
-3. **Wire message handlers** ← NEXT
-   - Connect `OwnTracksMessageHandler` to broker
+3. ~~**Wire message handlers**~~ ✅
+   - Connect `OwnTracksMessageHandler` to broker via amqtt plugin
    - Process incoming location messages → save to database
-   - Broadcast to WebSocket clients
+   - Broadcast to WebSocket clients via channel layer
+   - Created `OwnTracksPlugin` with `on_broker_message_received` hook
 
-4. **Traffic generator MQTT support**
+4. **Traffic generator MQTT support** ← NEXT
    - Add `--mqtt` flag to traffic generator script
    - Send location data via MQTT in addition to existing HTTP mode
    - Use same OwnTracks message format as real devices
@@ -87,13 +88,14 @@ my_tracks/mqtt/
 ├── broker.py        # MQTTBroker class
 ├── handlers.py      # OwnTracksMessageHandler
 ├── auth.py          # DjangoAuthPlugin
-└── commands.py      # Command, CommandPublisher
+├── commands.py      # Command, CommandPublisher
+└── plugin.py        # OwnTracksPlugin (amqtt broker plugin)
 ```
 
 ## Test Coverage
 
-- 175 tests passing
-- 91.30% code coverage
+- 233 tests passing
+- 91% code coverage
 - All pyright checks pass
 
 ## Technical Notes

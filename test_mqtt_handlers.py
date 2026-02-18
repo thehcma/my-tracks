@@ -5,23 +5,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from hamcrest import (
-    assert_that,
-    equal_to,
-    has_entries,
-    has_key,
-    is_,
-    none,
-)
+from hamcrest import assert_that, equal_to, has_entries, has_key, is_, none
 
-from my_tracks.mqtt.handlers import (
-    OwnTracksMessageHandler,
-    extract_location_data,
-    extract_lwt_data,
-    extract_transition_data,
-    parse_owntracks_message,
-    parse_owntracks_topic,
-)
+from my_tracks.mqtt.handlers import (OwnTracksMessageHandler,
+                                     extract_location_data, extract_lwt_data,
+                                     extract_transition_data,
+                                     parse_owntracks_message,
+                                     parse_owntracks_topic)
 
 
 class TestParseOwnTracksMessage:
