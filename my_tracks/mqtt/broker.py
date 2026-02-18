@@ -24,6 +24,7 @@ def get_default_config(
     mqtt_ws_port: int = 8083,
     allow_anonymous: bool = True,
     use_django_auth: bool = False,
+    use_owntracks_handler: bool = True,
 ) -> dict[str, Any]:
     """
     Get the default MQTT broker configuration.
@@ -33,6 +34,7 @@ def get_default_config(
         mqtt_ws_port: WebSocket port for MQTT over WS (default: 8083)
         allow_anonymous: Allow anonymous connections (default: True for initial setup)
         use_django_auth: Use Django authentication plugin (default: False)
+        use_owntracks_handler: Use OwnTracks message handler plugin (default: True)
 
     Returns:
         Configuration dictionary for amqtt Broker
@@ -40,6 +42,10 @@ def get_default_config(
     plugins = [
         "amqtt.plugins.sys.broker.BrokerSysPlugin",
     ]
+
+    # Add OwnTracks handler plugin if requested (requires Django)
+    if use_owntracks_handler:
+        plugins.append("my_tracks.mqtt.plugin:OwnTracksPlugin")
 
     auth_config: dict[str, Any] = {
         "allow-anonymous": allow_anonymous,
@@ -90,6 +96,7 @@ class MQTTBroker:
         mqtt_ws_port: int = 8083,
         allow_anonymous: bool = True,
         use_django_auth: bool = False,
+        use_owntracks_handler: bool = True,
         config: dict[str, Any] | None = None,
     ) -> None:
         """
@@ -100,12 +107,14 @@ class MQTTBroker:
             mqtt_ws_port: WebSocket port for MQTT over WS
             allow_anonymous: Allow anonymous connections
             use_django_auth: Use Django authentication plugin for user auth
+            use_owntracks_handler: Use OwnTracks message handler plugin (requires Django)
             config: Custom configuration (overrides defaults if provided)
         """
         self.mqtt_port = mqtt_port
         self.mqtt_ws_port = mqtt_ws_port
         self.allow_anonymous = allow_anonymous
         self.use_django_auth = use_django_auth
+        self.use_owntracks_handler = use_owntracks_handler
 
         if config is not None:
             self._config = config
@@ -115,6 +124,7 @@ class MQTTBroker:
                 mqtt_ws_port=mqtt_ws_port,
                 allow_anonymous=allow_anonymous,
                 use_django_auth=use_django_auth,
+                use_owntracks_handler=use_owntracks_handler,
             )
 
         self._broker: Broker | None = None

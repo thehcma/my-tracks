@@ -10,10 +10,12 @@ from my_tracks.mqtt.handlers import (OwnTracksMessageHandler,
                                      extract_transition_data,
                                      parse_owntracks_message,
                                      parse_owntracks_topic)
+from my_tracks.mqtt.plugin import OwnTracksPlugin
 
 __all__ = [
     "MQTTBroker",
     "OwnTracksMessageHandler",
+    "OwnTracksPlugin",
     "parse_owntracks_message",
     "parse_owntracks_topic",
     "extract_location_data",

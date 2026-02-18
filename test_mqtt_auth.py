@@ -7,12 +7,8 @@ import pytest
 from django.contrib.auth import get_user_model
 from hamcrest import assert_that, equal_to, is_
 
-from my_tracks.mqtt.auth import (
-    DjangoAuthPlugin,
-    authenticate_user,
-    check_topic_access,
-    get_auth_config,
-)
+from my_tracks.mqtt.auth import (DjangoAuthPlugin, authenticate_user,
+                                 check_topic_access, get_auth_config)
 from my_tracks.mqtt.broker import get_default_config
 
 User = get_user_model()
