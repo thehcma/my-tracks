@@ -67,6 +67,7 @@ def save_location_to_db(location_data: dict[str, Any]) -> dict[str, Any] | None:
             altitude=location_data.get("altitude"),
             velocity=location_data.get("velocity"),
             battery_level=location_data.get("battery"),
+            connection_type=location_data.get("connection", ""),
         )
 
         # Serialize for WebSocket broadcast
