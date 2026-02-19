@@ -1,13 +1,7 @@
 """Tests for the Command API views."""
 
-import json
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 from django.test import TestCase
-from hamcrest import (assert_that, contains_string, equal_to, has_entries,
-                      has_key)
+from hamcrest import assert_that, equal_to, has_entries, has_key
 from rest_framework import status
 from rest_framework.test import APIClient
 
