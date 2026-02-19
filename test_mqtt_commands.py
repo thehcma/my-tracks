@@ -2,13 +2,12 @@
 
 import json
 from datetime import UTC, datetime
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from hamcrest import (assert_that, calling, contains_string, equal_to,
-                      greater_than, has_entries, has_key, instance_of, is_,
-                      is_not, none, not_none, raises)
+from hamcrest import (assert_that, equal_to, greater_than, has_entries,
+                      has_key, instance_of, is_, is_not, none, not_none,
+                      raises)
 
 from my_tracks.mqtt.commands import (Command, CommandPublisher, CommandType,
                                      get_command_topic, parse_device_id)

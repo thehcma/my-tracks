@@ -6,7 +6,7 @@ from OwnTracks clients and querying stored location history.
 """
 import logging
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer

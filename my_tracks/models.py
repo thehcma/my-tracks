@@ -4,9 +4,6 @@ Database models for OwnTracks location tracking.
 This module defines the data models for storing device information
 and location data from OwnTracks clients.
 """
-from dataclasses import dataclass
-from typing import Optional
-
 from django.db import models
 from django.utils import timezone
 
