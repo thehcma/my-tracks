@@ -62,24 +62,14 @@ class LocationViewSet(viewsets.ModelViewSet):
         else:
             client_ip = request.META.get('REMOTE_ADDR')
 
-        print("="*80)
-        print(f"📍 Incoming location request from: {client_ip}")
-        print(f"📦 Request data: {request.data}")
-        print(f"📋 Content-Type: {request.content_type}")
-        print("="*80)
-
-        logger.info("="*80)
-        logger.info(f"Incoming location request from: {client_ip}")
-        logger.info(f"Request data: {request.data}")
-        logger.info(f"Content-Type: {request.content_type}")
-        logger.info("="*80)
+        logger.info("Incoming location request from: %s", client_ip)
+        logger.debug("Request data: %s, Content-Type: %s", request.data, request.content_type)
 
         # Check message type
         msg_type = request.data.get('_type', 'location')
 
         if msg_type != 'location':
-            print(f"ℹ️  Received non-location message: {msg_type}")
-            logger.info(f"Received non-location message type: {msg_type}, storing")
+            logger.info("Received non-location message type: %s, storing", msg_type)
 
             # Try to identify the device - prioritize topic over tid
             device = None
@@ -109,11 +99,9 @@ class LocationViewSet(viewsets.ModelViewSet):
                 )
                 # Always log device connections (special case - always appears)
                 if created:
-                    print(f"🔌 New device connected: {device_id} from {client_ip}")
-                    logger.info(f"New device connected: {device_id} from {client_ip}")
+                    logger.info("New device connected: %s from %s", device_id, client_ip)
                 else:
-                    print(f"🔌 Device reconnected: {device_id} from {client_ip}")
-                    logger.debug(f"Device reconnected: {device_id} from {client_ip}")
+                    logger.debug("Device reconnected: %s from %s", device_id, client_ip)
 
             # Store the message
             OwnTracksMessage.objects.create(
@@ -139,11 +127,6 @@ class LocationViewSet(viewsets.ModelViewSet):
                 logger.info(f"Extracted device_id '{parts[-1]}' from topic '{topic}'")
 
         serializer = self.get_serializer(data=field_name_to_value, context={'client_ip': client_ip})
-        if not serializer.is_valid():
-            print("="*80)
-            print(f"❌ Validation errors: {serializer.errors}")
-            print("="*80)
-            logger.error(f"Validation errors: {serializer.errors}")
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
 

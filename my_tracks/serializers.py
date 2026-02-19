@@ -157,18 +157,7 @@ class LocationSerializer(serializers.ModelSerializer):
         Raises:
             serializers.ValidationError: If required fields are missing or invalid
         """
-        # Debug logging
-        print("="*80)
-        print("🔍 Received OwnTracks data:")
-        print(f"📦 Raw attrs: {attrs}")
-        print(f"🔑 Available keys: {list(attrs.keys())}")
-        print("="*80)
-
-        logger.info("="*80)
-        logger.info("Received OwnTracks data:")
-        logger.info(f"Raw attrs: {attrs}")
-        logger.info(f"Available keys: {list(attrs.keys())}")
-        logger.info("="*80)
+        logger.debug("Received OwnTracks data: %s (keys: %s)", attrs, list(attrs.keys()))
 
         # Device identification - prioritize topic over tid
         device_id = attrs.get('device_id')
@@ -200,13 +189,9 @@ class LocationSerializer(serializers.ModelSerializer):
         # Always log device connections (special case - always appears)
         client_ip = self.context.get('client_ip', 'unknown')
         if created:
-            # Use print to bypass log level filtering for device connections
-            print(f"🔌 New device connected: {device_id} from {client_ip}")
-            logger.info(f"New device connected: {device_id} from {client_ip}")
+            logger.info("New device connected: %s from %s", device_id, client_ip)
         else:
-            # Use print for reconnections too
-            print(f"🔌 Device reconnected: {device_id} from {client_ip}")
-            logger.debug(f"Device reconnected: {device_id} from {client_ip}")
+            logger.debug("Device reconnected: %s from %s", device_id, client_ip)
 
         # Map OwnTracks fields to model fields
         # Use explicit None check for longitude to handle 0 values correctly
@@ -231,8 +216,7 @@ class LocationSerializer(serializers.ModelSerializer):
             'tracker_id': attrs.get('tid', ''),
         }
 
-        print(f"✅ Transformed data: {transformed}")
-        logger.info(f"Transformed data: {transformed}")
+        logger.debug("Transformed data: %s", transformed)
 
         # Validate required fields
         if transformed['latitude'] is None:
