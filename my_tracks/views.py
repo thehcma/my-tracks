@@ -21,6 +21,7 @@ from rest_framework.response import Response
 
 from .models import Device, Location, OwnTracksMessage
 from .serializers import DeviceSerializer, LocationSerializer
+from .utils import extract_device_id
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +72,8 @@ class LocationViewSet(viewsets.ModelViewSet):
         if msg_type != 'location':
             logger.info("Received non-location message type: %s, storing", msg_type)
 
-            # Try to identify the device - prioritize topic over tid
+            # Try to identify the device
             device = None
-            device_id = None
 
             # Convert request.data to dict for type-safe access
             raw_data = request.data
@@ -81,16 +81,7 @@ class LocationViewSet(viewsets.ModelViewSet):
                 str(k): v for k, v in (raw_data.items() if hasattr(raw_data, 'items') else [])
             }
 
-            # Extract from topic first (format: owntracks/user/deviceid)
-            if 'topic' in field_name_to_value:
-                topic = str(field_name_to_value['topic'])
-                parts = topic.split('/')
-                if len(parts) >= 3:
-                    device_id = parts[-1]
-
-            # Fallback to tid
-            if not device_id:
-                device_id = field_name_to_value.get('tid')
+            device_id = extract_device_id(field_name_to_value)
 
             if device_id:
                 device, created = Device.objects.get_or_create(
@@ -114,17 +105,16 @@ class LocationViewSet(viewsets.ModelViewSet):
             # OwnTracks expects an empty JSON array response
             return Response([], status=status.HTTP_200_OK)
 
-        # Extract device_id from topic if present (format: owntracks/user/deviceid)
+        # Extract device_id from request data if not explicitly set
         raw_data = request.data
         field_name_to_value: dict[str, Any] = {
             str(k): v for k, v in (raw_data.items() if hasattr(raw_data, 'items') else [])
         }
-        if 'topic' in field_name_to_value and 'device_id' not in field_name_to_value:
-            topic = str(field_name_to_value['topic'])
-            parts = topic.split('/')
-            if len(parts) >= 3:
-                field_name_to_value['device_id'] = parts[-1]  # Get last part of topic path
-                logger.info("Extracted device_id '%s' from topic '%s'", parts[-1], topic)
+        if 'device_id' not in field_name_to_value:
+            device_id = extract_device_id(field_name_to_value)
+            if device_id:
+                field_name_to_value['device_id'] = device_id
+                logger.info("Extracted device_id '%s' from request data", device_id)
 
         serializer = self.get_serializer(data=field_name_to_value, context={'client_ip': client_ip})
         serializer.is_valid(raise_exception=True)

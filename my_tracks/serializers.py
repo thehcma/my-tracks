@@ -11,6 +11,7 @@ from typing import Any
 from rest_framework import serializers
 
 from .models import Device, Location
+from .utils import extract_device_id
 
 logger = logging.getLogger(__name__)
 
@@ -159,19 +160,7 @@ class LocationSerializer(serializers.ModelSerializer):
         logger.debug("Received OwnTracks data: %s (keys: %s)", attrs, list(attrs.keys()))
 
         # Device identification - prioritize topic over tid
-        device_id = attrs.get('device_id')
-
-        # Extract device ID from topic if present (format: owntracks/user/deviceid)
-        if not device_id and 'topic' in attrs:
-            topic = attrs.get('topic', '')
-            parts = topic.split('/')
-            if len(parts) >= 3:
-                device_id = parts[-1]  # Get last part of topic path
-                logger.info("Extracted device_id '%s' from topic '%s'", device_id, topic)
-
-        # Fallback to tid if no topic available
-        if not device_id:
-            device_id = attrs.get('tid')
+        device_id = extract_device_id(attrs)
 
         if not device_id:
             logger.error("Missing device_id, topic, or tid field")
