@@ -102,9 +102,15 @@ class Location(models.Model):
     )
 
     # Connection type: w=WiFi, o=Offline, m=Mobile
+    CONNECTION_TYPE_CHOICES = [
+        ('w', 'WiFi'),
+        ('o', 'Offline'),
+        ('m', 'Mobile'),
+    ]
     connection_type = models.CharField(
         max_length=1,
         blank=True,
+        choices=CONNECTION_TYPE_CHOICES,
         help_text="Connection type (from 'conn' field): w=WiFi, o=Offline, m=Mobile"
     )
 
