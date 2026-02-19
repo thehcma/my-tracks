@@ -21,13 +21,11 @@ class NetworkState:
     def get_current_ip(cls) -> str:
         """Get the current local IP address."""
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            local_ip = s.getsockname()[0]
-            s.close()
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
         except Exception:
-            local_ip = "Unable to detect"
-        return local_ip
+            return "Unable to detect"
 
     @classmethod
     def check_and_update_ip(cls) -> tuple[str, bool]:
@@ -59,25 +57,18 @@ def network_info(request: HttpRequest) -> JsonResponse:
     """Return current network information for dynamic UI updates."""
     local_ip, _ = NetworkState.check_and_update_ip()
     hostname = socket.gethostname()
+    server_port = request.META.get('SERVER_PORT', '8080')
 
     return JsonResponse({
         'hostname': hostname,
         'local_ip': local_ip,
-        'port': 8080
+        'port': int(server_port)
     })
 
 
 def home(request: HttpRequest) -> HttpResponse:
     """Home page with live map and activity log."""
-    # Get local IP address
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-    except Exception:
-        local_ip = "Unable to detect"
-
+    local_ip, _ = NetworkState.check_and_update_ip()
     hostname = socket.gethostname()
 
     # Get the actual port from the request (handles port 0 case correctly)

@@ -50,7 +50,7 @@ class TestWebUIViews:
     def test_network_info_returns_expected_fields(self) -> None:
         """Test that network_info returns required fields."""
         client = Client()
-        response = client.get('/network-info/')
+        response = client.get('/network-info/', SERVER_PORT='8080')
 
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
         data = response.json()
