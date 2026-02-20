@@ -82,14 +82,15 @@ Implementing embedded MQTT broker for OwnTracks bidirectional communication.
    - Real-time WebSocket broadcast of device status changes
    - Admin UI shows online/offline status with filtering
 
-7. **Historic view date & time picker** ← NEXT
-   - Replace time range `<select>` with date picker + dual-handle time slider
+7. ~~**Historic view date & time picker**~~ ✅ (PR #130)
+   - Replaced time range `<select>` with date picker + dual-handle time slider
    - Date picker (`<input type="date">`) to select any past day (default: today)
-   - noUiSlider dual-handle range (0:00–24:00) to select time window within day
-   - Live time labels update as handles are dragged
-   - API already supports `start_date` + `end_date` (no backend changes needed)
+   - noUiSlider dual-handle range (00:00–23:59) to select time window within day
+   - Live time labels update as handles are dragged, +59s end offset for full minute
+   - Added `end_time` Unix timestamp parameter to API
+   - Shared utility functions in `utils.ts` with 12 new TypeScript tests
 
-8. **Transition events**
+8. **Transition events** ← NEXT
    - Handle region enter/exit events
    - Store transition history
 
@@ -111,8 +112,8 @@ my_tracks/mqtt/
 
 ## Test Coverage
 
-- 310 tests passing
-- 90.67% code coverage
+- 314 Python tests + 79 TypeScript tests passing
+- 90.74% code coverage
 - All pyright checks pass
 
 ## Technical Notes

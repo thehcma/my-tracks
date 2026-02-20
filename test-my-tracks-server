@@ -100,6 +100,30 @@ test_console_flag() {
     fi
 }
 
+test_console_default_log_level() {
+    echo -n "Test: Console defaults to INFO log level... "
+    if timeout 5 $SCRIPT --http-port $TEST_PORT --console 2>&1 | grep -q "Log level: INFO"; then
+        echo -e "${GREEN}✓ PASS${NC}"
+        ((TESTS_PASSED++))
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        echo "  Expected: 'Log level: INFO' in output"
+        ((TESTS_FAILED++))
+    fi
+}
+
+test_console_explicit_log_level_override() {
+    echo -n "Test: Console with explicit --log-level overrides default... "
+    if timeout 5 $SCRIPT --http-port $TEST_PORT --console --log-level warning 2>&1 | grep -q "Log level: WARNING"; then
+        echo -e "${GREEN}✓ PASS${NC}"
+        ((TESTS_PASSED++))
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        echo "  Expected: 'Log level: WARNING' in output"
+        ((TESTS_FAILED++))
+    fi
+}
+
 test_file_logging() {
     echo -n "Test: File logging uses fixed log name... "
     # Use port 0 to let OS allocate ephemeral port
@@ -227,6 +251,8 @@ test_invalid_log_level
 test_invalid_argument
 test_valid_log_levels
 test_console_flag
+test_console_default_log_level
+test_console_explicit_log_level_override
 test_file_logging
 test_log_rotation
 test_custom_port

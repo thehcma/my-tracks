@@ -9,7 +9,7 @@
 #   --http-port PORT          Set HTTP server port (default: 8080, 0 = OS allocates, -1 = disabled)
 #   --mqtt-port PORT     Set MQTT broker port (default: 1883, 0 = OS allocates, -1 = disabled)
 #   --log-level LEVEL    Set Django log level (trace, debug, info, warning, error, critical)
-#                        Default: warning
+#                        Default: warning (info when using --console)
 #   --console            Output logs to console in addition to file (dual logging)
 #   -h, --help           Show this help message
 #
@@ -19,8 +19,8 @@
 #   ./my-tracks-server --mqtt-port -1     # Disable MQTT broker
 #   ./my-tracks-server --mqtt-port 0      # MQTT broker on OS-allocated port
 #   ./my-tracks-server --log-level debug  # Debug level, logs to file
-#   ./my-tracks-server --console          # Warning level, logs to BOTH console AND file
-#   ./my-tracks-server --http-port 18080 --log-level info --console  # Testing port, info level, dual logging
+#   ./my-tracks-server --console          # Info level (default for console), logs to BOTH console AND file
+#   ./my-tracks-server --http-port 18080 --log-level debug --console  # Testing port, debug level, dual logging
 
 set -e
 
@@ -106,6 +106,7 @@ log_level="WARNING"
 log_to_console=false
 
 # Parse command line arguments
+log_level_explicitly_set=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --http-port)
@@ -118,6 +119,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --log-level)
             log_level=$(echo "$2" | tr '[:lower:]' '[:upper:]')
+            log_level_explicitly_set=true
             shift 2
             ;;
         --console)
@@ -135,6 +137,11 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# If --console is used and log level wasn't explicitly set, default to INFO
+if [ "$log_to_console" = true ] && [ "$log_level_explicitly_set" = false ]; then
+    log_level="INFO"
+fi
 
 # Validate port (0 = OS allocates, negative = disabled)
 if ! [[ "$http_port" =~ ^-?[0-9]+$ ]] || [ "$http_port" -gt 65535 ]; then
