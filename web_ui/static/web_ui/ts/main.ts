@@ -589,7 +589,8 @@ function getPopupContent(location: TrackLocation): string {
 
 /**
  * Ensure a device name is present in the device selector dropdown.
- * Adds it if not already tracked. Returns true if the device was newly added.
+ * Inserts in sorted (case-insensitive lexicographic) order after "All Devices".
+ * Returns true if the device was newly added.
  * @param deviceName - The device name to ensure is in the selector
  */
 function ensureDeviceInSelector(deviceName: string): boolean {
@@ -601,7 +602,20 @@ function ensureDeviceInSelector(deviceName: string): boolean {
         const option = document.createElement('option');
         option.value = deviceName;
         option.textContent = deviceName;
-        selector.appendChild(option);
+
+        // Insert in sorted position (skip index 0 = "All Devices")
+        const nameLower = deviceName.toLowerCase();
+        let inserted = false;
+        for (let i = 1; i < selector.options.length; i++) {
+            if (selector.options[i].textContent!.toLowerCase() > nameLower) {
+                selector.insertBefore(option, selector.options[i]);
+                inserted = true;
+                break;
+            }
+        }
+        if (!inserted) {
+            selector.appendChild(option);
+        }
     }
 
     // Try to complete state restoration if we just added the pending device
