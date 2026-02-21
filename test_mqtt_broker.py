@@ -3,7 +3,8 @@
 import asyncio
 
 import pytest
-from hamcrest import assert_that, equal_to, has_key, is_, is_not, greater_than, not_none
+from hamcrest import (assert_that, equal_to, greater_than, has_key, is_,
+                      is_not, not_none)
 
 from my_tracks.mqtt.broker import MQTTBroker, get_default_config
 
@@ -37,14 +38,20 @@ class TestGetDefaultConfig:
         assert_that(config["listeners"]["ws-mqtt"]["bind"], equal_to("0.0.0.0:18083"))
 
     def test_allow_anonymous_default(self) -> None:
-        """Anonymous connections should be allowed by default."""
+        """Anonymous connections should include AnonymousAuthPlugin."""
         config = get_default_config()
-        assert_that(config["auth"]["allow-anonymous"], is_(True))
+        assert_that(
+            "amqtt.plugins.authentication.AnonymousAuthPlugin" in config["plugins"],
+            is_(True),
+        )
+        plugin_cfg = config["plugins"]["amqtt.plugins.authentication.AnonymousAuthPlugin"]
+        assert_that(plugin_cfg["allow_anonymous"], is_(True))
 
     def test_allow_anonymous_disabled(self) -> None:
-        """Anonymous connections can be disabled."""
+        """Disabling anonymous should pass allow_anonymous=False to plugin."""
         config = get_default_config(allow_anonymous=False)
-        assert_that(config["auth"]["allow-anonymous"], is_(False))
+        plugin_cfg = config["plugins"]["amqtt.plugins.authentication.AnonymousAuthPlugin"]
+        assert_that(plugin_cfg["allow_anonymous"], is_(False))
 
     def test_has_sys_plugin(self) -> None:
         """Config should include the $SYS broker plugin."""
@@ -53,6 +60,11 @@ class TestGetDefaultConfig:
             "amqtt.plugins.sys.broker.BrokerSysPlugin" in config["plugins"],
             is_(True),
         )
+
+    def test_no_auth_section(self) -> None:
+        """Config should not have a top-level auth section (handled by plugins)."""
+        config = get_default_config()
+        assert_that("auth" in config, is_(False))
 
 
 class TestMQTTBrokerInit:

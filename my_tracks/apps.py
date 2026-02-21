@@ -53,6 +53,12 @@ def _run_mqtt_broker(mqtt_port: int) -> None:
     _mqtt_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(_mqtt_loop)
 
+    # TODO: Decide on authentication strategy for MQTT connections.
+    # Currently anonymous access is allowed so the phone can connect
+    # without Django user credentials.  Options to evaluate:
+    #   1. Keep anonymous (simple, single-user setup)
+    #   2. Enable DjangoAuthPlugin with a dedicated MQTT user
+    #   3. Token-based auth via a custom plugin
     _mqtt_broker = MQTTBroker(
         mqtt_port=mqtt_port,
         allow_anonymous=True,
