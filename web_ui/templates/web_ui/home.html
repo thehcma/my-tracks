@@ -30,14 +30,18 @@
                         <div class="historic-controls hidden" id="historic-controls">
                             <input type="date" id="historic-date" class="historic-date-input" title="Select date for historic trail" aria-label="Select date for historic trail">
                             <div class="time-slider-container" id="time-slider-container" title="Drag handles to set time window for historic trail">
-                                <div id="time-slider" class="time-slider"></div>
+                                <div class="time-slider-track-row">
+                                    <div id="time-slider" class="time-slider"></div>
+                                </div>
                                 <span class="time-slider-label" id="time-slider-label">00:00 – 23:59</span>
                             </div>
                         </div>
                         <div class="precision-slider-container hidden" id="precision-slider-container" title="Trail precision: 0% = Coarse (~10 pts/hr), 100% = Precise (all points)">
-                            <span class="precision-label">🔍</span>
-                            <input type="range" id="precision-slider" class="precision-slider" min="0" max="100" value="100">
-                            <span class="precision-label">🎯</span>
+                            <div class="precision-slider-row">
+                                <span class="precision-label">🔍</span>
+                                <input type="range" id="precision-slider" class="precision-slider" min="0" max="100" value="100">
+                                <span class="precision-label">🎯</span>
+                            </div>
                             <span class="precision-value" id="precision-value">100%</span>
                         </div>
                         <select class="device-selector" id="device-selector" title="Filter by device">
