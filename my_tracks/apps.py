@@ -13,6 +13,10 @@ from my_tracks.mqtt.broker import MQTTBroker
 
 logger = logging.getLogger(__name__)
 
+# Shutdown polling interval in seconds
+# Lower value = faster shutdown response but more CPU cycles
+_SHUTDOWN_POLL_INTERVAL_SECONDS = 0.1
+
 
 class _MqttBrokerState:
     """Holder for MQTT broker thread state.
@@ -93,7 +97,7 @@ def _run_mqtt_broker(mqtt_port: int) -> None:
 
         # Keep the event loop alive while the broker is running
         while _state.broker.is_running:
-            await asyncio.sleep(1)
+            await asyncio.sleep(_SHUTDOWN_POLL_INTERVAL_SECONDS)
 
     try:
         _state.loop.run_until_complete(_start_and_run())

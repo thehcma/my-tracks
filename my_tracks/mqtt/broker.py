@@ -18,6 +18,10 @@ from amqtt.broker import Broker
 
 logger = logging.getLogger(__name__)
 
+# Shutdown polling interval in seconds
+# Lower value = faster shutdown response but more CPU cycles
+_SHUTDOWN_POLL_INTERVAL_SECONDS = 0.1
+
 
 def get_default_config(
     mqtt_port: int = 1883,
@@ -277,7 +281,7 @@ class MQTTBroker:
 
         try:
             while self._running:
-                await asyncio.sleep(1)
+                await asyncio.sleep(_SHUTDOWN_POLL_INTERVAL_SECONDS)
         except asyncio.CancelledError:
             if self._running:
                 await self.stop()
