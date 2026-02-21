@@ -24,6 +24,14 @@
 
 set -e
 
+# Time constants (in seconds) - all time values should use these constants
+# Polling intervals should be responsive (0.25s max)
+readonly POLL_INTERVAL_SECONDS=0.25
+# Wait time to allow port to be fully released by OS
+readonly PORT_RELEASE_WAIT_SECONDS=1
+# Wait time for server startup before checking status
+readonly SERVER_STARTUP_WAIT_SECONDS=1
+
 # Server process PID (set when daphne starts)
 server_pid=""
 cleanup_done=false
@@ -43,18 +51,19 @@ graceful_kill() {
     
     # Wait for process to terminate
     local elapsed=0
-    while [ $elapsed -lt $((wait_seconds * 2)) ]; do
+    local max_iterations=$((wait_seconds * 4))  # 4 checks per second (0.25s each)
+    while [ $elapsed -lt $max_iterations ]; do
         if ! kill -0 "$pid" 2>/dev/null; then
             return 0  # Process terminated gracefully
         fi
-        sleep 0.5
+        sleep "$POLL_INTERVAL_SECONDS"
         elapsed=$((elapsed + 1))
     done
     
     # Force kill if still running
     if kill -0 "$pid" 2>/dev/null; then
         kill -KILL "$pid" 2>/dev/null || true
-        sleep 0.5
+        sleep "$POLL_INTERVAL_SECONDS"
     fi
 }
 
@@ -197,15 +206,16 @@ if [ -n "$existing_pids" ]; then
             done
             
             # Wait for processes to terminate (max 5 seconds)
-            sleep 1
-            for i in {1..10}; do
+            sleep "$PORT_RELEASE_WAIT_SECONDS"
+            # 20 iterations * 0.25s = 5 seconds total
+            for i in $(seq 1 20); do
                 still_running=$(lsof -ti tcp:"$http_port" 2>/dev/null || true)
                 if [ -z "$still_running" ]; then
                     echo "✅ All processes stopped"
-                    sleep 1  # Give port time to be released
+                    sleep "$PORT_RELEASE_WAIT_SECONDS"  # Give port time to be released
                     break
                 fi
-                sleep 0.5
+                sleep "$POLL_INTERVAL_SECONDS"
             done
             
             # Force kill any remaining processes
@@ -215,7 +225,7 @@ if [ -n "$existing_pids" ]; then
                 for pid in $still_running; do
                     kill -KILL "$pid" 2>/dev/null || true
                 done
-                sleep 1
+                sleep "$PORT_RELEASE_WAIT_SECONDS"
             fi
             ;;
         *)
@@ -358,7 +368,7 @@ if [ "$log_to_console" = true ]; then
     server_pid=$!
     
     # Wait for daphne to start and report the port
-    sleep 1
+    sleep "$SERVER_STARTUP_WAIT_SECONDS"
     
     # Detect actual port from log file if port was 0
     if [ "$http_port" = "0" ]; then
@@ -388,7 +398,7 @@ else
     server_pid=$!
     
     # Wait for daphne to start and report the port
-    sleep 1
+    sleep "$SERVER_STARTUP_WAIT_SECONDS"
     
     # Detect actual port from log file if port was 0
     if [ "$http_port" = "0" ]; then
