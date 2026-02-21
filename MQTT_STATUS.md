@@ -98,6 +98,14 @@ Implementing embedded MQTT broker for OwnTracks bidirectional communication.
    - Connect waypoint storage to command API
    - Allow UI to send waypoints to devices
 
+10. **Friends feature**
+   - Handle card messages (`_type: "card"`) containing user info (name, avatar)
+   - Create Friend relationship model (user-to-user permissions)
+   - Filter location broadcasts based on friend relationships
+   - Publish card messages to friends when users connect
+   - Add API endpoints for managing friend lists
+   - Update WebSocket to respect friend permissions
+
 ## Key Files
 
 ```

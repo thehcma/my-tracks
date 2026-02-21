@@ -15,7 +15,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from hamcrest import assert_that, equal_to, is_
+from hamcrest import assert_that, equal_to, is_, not_none
 
 
 class TestRuntimeConfig:
@@ -643,7 +643,7 @@ class TestClientDisconnectMiddleware:
             }
             # Should not raise or call default handler
             with patch("config.asgi.logger") as mock_logger:
-                assert handler is not None
+                assert_that(handler, is_(not_none()))
                 handler(loop, ctx)
                 mock_logger.debug.assert_called_once()
         finally:
@@ -680,7 +680,7 @@ class TestClientDisconnectMiddleware:
                 "message": "Something went wrong",
                 "exception": RuntimeError("real error"),
             }
-            assert handler is not None
+            assert_that(handler, is_(not_none()))
             handler(loop, ctx)
             mock_fallback.assert_called_once_with(loop, ctx)
         finally:
@@ -713,7 +713,7 @@ class TestClientDisconnectMiddleware:
                 "message": "Something went wrong",
                 "exception": RuntimeError("real error"),
             }
-            assert handler is not None
+            assert_that(handler, is_(not_none()))
             # This should call loop.default_exception_handler which logs to stderr
             # We just verify it doesn't raise
             with patch.object(loop, "default_exception_handler") as mock_default:
