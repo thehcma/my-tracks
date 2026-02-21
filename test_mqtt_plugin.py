@@ -25,7 +25,7 @@ class TestSaveLocationToDb(TestCase):
     def test_save_valid_location(self) -> None:
         """Should save location and return serialized data."""
         location_data = {
-            "device": "testuser/phone",
+            "device": "phone",
             "latitude": 51.5074,
             "longitude": -0.1278,
             "timestamp": datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
@@ -41,14 +41,14 @@ class TestSaveLocationToDb(TestCase):
         assert_that(result, is_not(none()))
         assert_that(result, is_not(none()))
         assert_that(result, has_entries({
-            "device_id_display": "testuser/phone",
+            "device_id_display": "phone",
             "latitude": "51.5074000000",
             "longitude": "-0.1278000000",
         }))
 
         # Verify saved to database
         location = Location.objects.get(id=result["id"])
-        assert_that(location.device.device_id, equal_to("testuser/phone"))
+        assert_that(location.device.device_id, equal_to("phone"))
         assert_that(float(location.latitude), equal_to(51.5074))
         assert_that(float(location.longitude), equal_to(-0.1278))
         assert_that(location.tracker_id, equal_to("PH"))
@@ -57,7 +57,7 @@ class TestSaveLocationToDb(TestCase):
     def test_save_location_minimal(self) -> None:
         """Should save location with only required fields."""
         location_data = {
-            "device": "user/device",
+            "device": "device",
             "latitude": 40.7128,
             "longitude": -74.006,
             "timestamp": datetime(2024, 6, 15, 9, 30, 0, tzinfo=UTC),
@@ -67,12 +67,12 @@ class TestSaveLocationToDb(TestCase):
 
         assert_that(result, is_not(none()))
         assert_that(result, is_not(none()))
-        assert_that(result["device_id_display"], equal_to("user/device"))
+        assert_that(result["device_id_display"], equal_to("device"))
 
     def test_save_location_exception(self) -> None:
         """Should return None on database error."""
         location_data = {
-            "device": "user/device",
+            "device": "device",
             # Missing required latitude
             "longitude": -74.006,
             "timestamp": datetime.now(tz=UTC),
@@ -324,7 +324,7 @@ class TestOwnTracksPluginMessageHandling:
 
         # Verify the saved location
         location = Location.objects.latest("id")
-        assert_that(location.device.device_id, equal_to("testuser/phone"))
+        assert_that(location.device.device_id, equal_to("phone"))
         assert_that(float(location.latitude), equal_to(51.5))
         assert_that(float(location.longitude), equal_to(-0.1))
         assert_that(location.tracker_id, equal_to("TS"))
@@ -348,7 +348,7 @@ class TestOwnTracksPluginMessageHandling:
         broadcast_mock.assert_called_once()
         call_args = broadcast_mock.call_args[0][0]
         assert_that(call_args, has_entries(
-            device_id_display="testuser/phone",
+            device_id_display="phone",
         ))
 
     @pytest.mark.asyncio
@@ -360,7 +360,7 @@ class TestOwnTracksPluginMessageHandling:
         # Create an online device first
         from asgiref.sync import sync_to_async
         device = await sync_to_async(Device.objects.create)(
-            device_id="user/device",
+            device_id="device",
             name="Test Device",
             is_online=True,
         )
@@ -386,7 +386,7 @@ class TestOwnTracksPluginMessageHandling:
         broadcast_mock.assert_called_once()
         call_args = broadcast_mock.call_args[0][0]
         assert_that(call_args, has_entries(
-            device_id="user/device",
+            device_id="device",
             is_online=False,
             event="device_offline",
         ))
@@ -490,7 +490,7 @@ class TestBroadcastLocation:
 
         location_data = {
             "id": 123,
-            "device_id": "user/device",
+            "device_id": "device",
             "latitude": 51.5,
             "longitude": -0.1,
         }

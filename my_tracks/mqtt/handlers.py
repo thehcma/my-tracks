@@ -101,8 +101,8 @@ def extract_location_data(
         logger.warning("Invalid timestamp in location message: %s - %s", tst, e)
         return None
 
-    # Build device ID from topic info
-    device_id = f"{topic_info['user']}/{topic_info['device']}"
+    # Use device name only (not user/device)
+    device_id = topic_info['device']
 
     # Use tid (tracker ID) if available, otherwise use device name
     tracker_id = message.get("tid", topic_info["device"])
@@ -163,7 +163,7 @@ def extract_lwt_data(
     if msg_type != "lwt":
         return None
 
-    device_id = f"{topic_info['user']}/{topic_info['device']}"
+    device_id = topic_info['device']
 
     # tst in LWT is when the device first connected
     tst = message.get("tst")
@@ -203,7 +203,7 @@ def extract_transition_data(
     if msg_type != "transition":
         return None
 
-    device_id = f"{topic_info['user']}/{topic_info['device']}"
+    device_id = topic_info['device']
 
     event = message.get("event")  # 'enter' or 'leave'
     desc = message.get("desc")  # Region name
