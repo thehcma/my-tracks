@@ -588,6 +588,31 @@ function getPopupContent(location: TrackLocation): string {
 }
 
 /**
+ * Ensure a device name is present in the device selector dropdown.
+ * Adds it if not already tracked. Returns true if the device was newly added.
+ * @param deviceName - The device name to ensure is in the selector
+ */
+function ensureDeviceInSelector(deviceName: string): boolean {
+    if (devices.has(deviceName)) return false;
+
+    devices.add(deviceName);
+    const selector = document.getElementById('device-selector') as HTMLSelectElement;
+    if (selector) {
+        const option = document.createElement('option');
+        option.value = deviceName;
+        option.textContent = deviceName;
+        selector.appendChild(option);
+    }
+
+    // Try to complete state restoration if we just added the pending device
+    if (pendingRestoreState && pendingRestoreState.selectedDevice === deviceName) {
+        completeStateRestore();
+    }
+
+    return true;
+}
+
+/**
  * Update device marker on map.
  * @param location - Location data
  */
@@ -598,22 +623,7 @@ function updateDeviceMarker(location: TrackLocation): void {
 
     if (isNaN(lat) || isNaN(lon)) return;
 
-    // Add device to set and update selector
-    if (!devices.has(deviceName)) {
-        devices.add(deviceName);
-        const selector = document.getElementById('device-selector') as HTMLSelectElement;
-        if (selector) {
-            const option = document.createElement('option');
-            option.value = deviceName;
-            option.textContent = deviceName;
-            selector.appendChild(option);
-        }
-
-        // Try to complete state restoration if we just added the pending device
-        if (pendingRestoreState && pendingRestoreState.selectedDevice === deviceName) {
-            completeStateRestore();
-        }
-    }
+    ensureDeviceInSelector(deviceName);
 
     // In live mode, filter by selection if set; in historic mode, also filter
     if (selectedDevice && selectedDevice !== deviceName) {
@@ -2293,8 +2303,13 @@ function connectWebSocket(): void {
                         loadLiveActivityHistory();
                         liveUpdateDebounceTimer = null;
                     }, liveUpdateDebounceDelay);
-                } else if (message.type === 'location') {
-                    console.log(`📍 Location received but not in live mode (isLiveMode=${isLiveMode})`);
+                } else if (message.type === 'location' && message.data) {
+                    // Not in live mode, but still update the device selector
+                    // so new devices appear without needing to switch modes
+                    const deviceName = message.data.device_name || 'Unknown';
+                    if (ensureDeviceInSelector(deviceName)) {
+                        console.log(`📍 New device '${deviceName}' added to selector (historic mode)`);
+                    }
                 }
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
