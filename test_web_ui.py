@@ -7,7 +7,9 @@ from unittest.mock import patch
 import netifaces
 import pytest
 from django.test import Client
-from hamcrest import assert_that, contains_string, equal_to, has_key
+from hamcrest import (assert_that, contains_string, equal_to, greater_than,
+                     has_item, has_key, has_length, instance_of, is_, is_not,
+                     not_none)
 from rest_framework import status
 
 
@@ -75,7 +77,7 @@ class TestWebUIViews:
         assert_that(data, has_key('local_ips'))
         assert_that(data, has_key('port'))
         assert_that(data['port'], equal_to(8080))
-        assert isinstance(data['local_ips'], list)
+        assert_that(data['local_ips'], instance_of(list))
 
 
 @pytest.mark.django_db
@@ -87,17 +89,17 @@ class TestNetworkDiscovery:
         from web_ui.views import get_all_local_ips
 
         ips = get_all_local_ips()
-        assert isinstance(ips, list)
+        assert_that(ips, instance_of(list))
         # Should not contain loopback addresses
         for ip in ips:
-            assert not ip.startswith('127.')
+            assert_that(ip.startswith('127.'), is_(False))
 
     def test_get_all_local_ips_returns_sorted(self) -> None:
         """Test that get_all_local_ips returns sorted, deduplicated IPs."""
         from web_ui.views import get_all_local_ips
 
         ips = get_all_local_ips()
-        assert ips == sorted(set(ips))
+        assert_that(ips, equal_to(sorted(set(ips))))
 
     def test_get_all_local_ips_excludes_tunnel_interfaces(self) -> None:
         """IPs without a broadcast address (VPN/tunnels) are excluded."""
@@ -128,7 +130,7 @@ class TestNetworkDiscovery:
             if test_ip in settings.ALLOWED_HOSTS:
                 settings.ALLOWED_HOSTS.remove(test_ip)
             update_allowed_hosts([test_ip])
-            assert test_ip in settings.ALLOWED_HOSTS
+            assert_that(settings.ALLOWED_HOSTS, has_item(test_ip))
         finally:
             settings.ALLOWED_HOSTS[:] = original
 
@@ -159,18 +161,18 @@ class TestNetworkState:
         from web_ui.views import NetworkState
 
         ip = NetworkState.get_current_ip()
-        assert isinstance(ip, str)
-        assert len(ip) > 0
+        assert_that(ip, instance_of(str))
+        assert_that(ip, has_length(greater_than(0)))
 
     def test_get_current_ips_returns_list(self) -> None:
         """Test that get_current_ips returns a list of IP strings."""
         from web_ui.views import NetworkState
 
         ips = NetworkState.get_current_ips()
-        assert isinstance(ips, list)
+        assert_that(ips, instance_of(list))
         for ip in ips:
-            assert isinstance(ip, str)
-            assert not ip.startswith('127.')
+            assert_that(ip, instance_of(str))
+            assert_that(ip.startswith('127.'), is_(False))
 
     def test_check_and_update_ip_returns_tuple(self) -> None:
         """Test that check_and_update_ip returns (ip, changed) tuple."""
@@ -180,8 +182,8 @@ class TestNetworkState:
         NetworkState.last_known_ips = None
 
         ip, changed = NetworkState.check_and_update_ip()
-        assert isinstance(ip, str)
-        assert isinstance(changed, bool)
+        assert_that(ip, instance_of(str))
+        assert_that(changed, instance_of(bool))
         # First call should not show change
         assert_that(changed, equal_to(False))
 
@@ -341,13 +343,13 @@ class TestThemeCSS:
         """CSS must have a [data-theme='light'] block."""
         css = CSS_PATH.read_text()
         block = _extract_css_block(css, '[data-theme="light"]')
-        assert block, "Missing [data-theme=\"light\"] block in main.css"
+        assert_that(block, is_not(equal_to('')))
 
     def test_dark_theme_block_exists(self) -> None:
         """CSS must have a [data-theme='dark'] block."""
         css = CSS_PATH.read_text()
         block = _extract_css_block(css, '[data-theme="dark"]')
-        assert block, "Missing [data-theme=\"dark\"] block in main.css"
+        assert_that(block, is_not(equal_to('')))
 
     @pytest.mark.parametrize('variable', REQUIRED_CSS_VARIABLES)
     def test_light_theme_has_variable(self, variable: str) -> None:
@@ -378,10 +380,11 @@ class TestThemeCSS:
         light_bg = re.search(r'--bg-main:\s*([^;]+);', light)
         dark_bg = re.search(r'--bg-main:\s*([^;]+);', dark)
 
-        assert light_bg, "--bg-main not found in light theme"
-        assert dark_bg, "--bg-main not found in dark theme"
-        assert light_bg.group(1).strip() != dark_bg.group(1).strip(), (
-            f"Light and dark themes have identical --bg-main: {light_bg.group(1).strip()}"
+        assert_that(light_bg, is_(not_none()))
+        assert_that(dark_bg, is_(not_none()))
+        assert_that(
+            light_bg.group(1).strip(),  # type: ignore[union-attr]
+            is_not(equal_to(dark_bg.group(1).strip())),  # type: ignore[union-attr]
         )
 
     def test_light_and_dark_use_different_text_main(self) -> None:
@@ -393,10 +396,11 @@ class TestThemeCSS:
         light_text = re.search(r'--text-main:\s*([^;]+);', light)
         dark_text = re.search(r'--text-main:\s*([^;]+);', dark)
 
-        assert light_text, "--text-main not found in light theme"
-        assert dark_text, "--text-main not found in dark theme"
-        assert light_text.group(1).strip() != dark_text.group(1).strip(), (
-            f"Light and dark themes have identical --text-main: {light_text.group(1).strip()}"
+        assert_that(light_text, is_(not_none()))
+        assert_that(dark_text, is_(not_none()))
+        assert_that(
+            light_text.group(1).strip(),  # type: ignore[union-attr]
+            is_not(equal_to(dark_text.group(1).strip())),  # type: ignore[union-attr]
         )
 
 

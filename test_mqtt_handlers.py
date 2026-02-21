@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from hamcrest import assert_that, equal_to, has_entries, has_key, is_, none
+from hamcrest import assert_that, equal_to, has_entries, has_key, is_, none, any_of, instance_of
 
 from my_tracks.mqtt.handlers import (OwnTracksMessageHandler,
                                      extract_location_data, extract_lwt_data,
@@ -219,7 +219,7 @@ class TestExtractLocationData:
         # On platforms that support negative timestamps, this will work
         # On those that don't, it should return None
         # Either way, we test that it doesn't crash
-        assert result is None or isinstance(result, dict)
+        assert_that(result, any_of(is_(none()), instance_of(dict)))
 
 
 class TestExtractLwtData:

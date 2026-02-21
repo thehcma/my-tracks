@@ -3,7 +3,7 @@
 import asyncio
 
 import pytest
-from hamcrest import assert_that, equal_to, has_key, is_
+from hamcrest import assert_that, equal_to, has_key, is_, is_not, greater_than, not_none
 
 from my_tracks.mqtt.broker import MQTTBroker, get_default_config
 
@@ -115,8 +115,8 @@ class TestMQTTBrokerLifecycle:
             await broker.start()
             # After start, actual_mqtt_port should return a valid port
             actual = broker.actual_mqtt_port
-            assert actual is not None
-            assert actual > 0
+            assert_that(actual, is_(not_none()))
+            assert_that(actual, greater_than(0))
         finally:
             if broker.is_running:
                 await broker.stop()
@@ -179,11 +179,11 @@ class TestOSAllocatedPorts:
             assert_that(broker.is_running, is_(True))
             # actual_mqtt_port should return the OS-allocated port
             actual_mqtt_port = broker.actual_mqtt_port
-            assert actual_mqtt_port is not None
+            assert_that(actual_mqtt_port, is_(not_none()))
             # OS should allocate an ephemeral port (typically > 1024)
-            assert actual_mqtt_port > 0
+            assert_that(actual_mqtt_port, greater_than(0))
             # Should not be 0 anymore
-            assert actual_mqtt_port != 0
+            assert_that(actual_mqtt_port, is_not(equal_to(0)))
         finally:
             if broker.is_running:
                 await broker.stop()
@@ -195,9 +195,9 @@ class TestOSAllocatedPorts:
         try:
             await broker.start()
             actual_ws_port = broker.actual_ws_port
-            assert actual_ws_port is not None
-            assert actual_ws_port > 0
-            assert actual_ws_port != 0
+            assert_that(actual_ws_port, is_(not_none()))
+            assert_that(actual_ws_port, greater_than(0))
+            assert_that(actual_ws_port, is_not(equal_to(0)))
         finally:
             if broker.is_running:
                 await broker.stop()
@@ -210,9 +210,9 @@ class TestOSAllocatedPorts:
             await broker.start()
             mqtt_port = broker.actual_mqtt_port
             ws_port = broker.actual_ws_port
-            assert mqtt_port is not None
-            assert ws_port is not None
-            assert mqtt_port != ws_port
+            assert_that(mqtt_port, is_(not_none()))
+            assert_that(ws_port, is_(not_none()))
+            assert_that(mqtt_port, is_not(equal_to(ws_port)))
         finally:
             if broker.is_running:
                 await broker.stop()
@@ -228,7 +228,7 @@ class TestProtocolListening:
         try:
             await broker.start()
             port = broker.actual_mqtt_port
-            assert port is not None
+            assert_that(port, is_(not_none()))
 
             # Open a plain TCP connection — the broker should accept it
             reader, writer = await asyncio.open_connection("127.0.0.1", port)
@@ -245,7 +245,7 @@ class TestProtocolListening:
         try:
             await broker.start()
             port = broker.actual_ws_port
-            assert port is not None
+            assert_that(port, is_(not_none()))
 
             # The WS listener is still a TCP server underneath —
             # verify it accepts the transport-level connection.
@@ -262,7 +262,7 @@ class TestProtocolListening:
         broker = MQTTBroker(mqtt_port=0, mqtt_ws_port=0, use_owntracks_handler=False)
         await broker.start()
         port = broker.actual_mqtt_port
-        assert port is not None
+        assert_that(port, is_(not_none()))
         await broker.stop()
 
         with pytest.raises(OSError):
@@ -274,7 +274,7 @@ class TestProtocolListening:
         broker = MQTTBroker(mqtt_port=0, mqtt_ws_port=0, use_owntracks_handler=False)
         await broker.start()
         port = broker.actual_ws_port
-        assert port is not None
+        assert_that(port, is_(not_none()))
         await broker.stop()
 
         with pytest.raises(OSError):
@@ -288,8 +288,8 @@ class TestProtocolListening:
             await broker.start()
             mqtt_port = broker.actual_mqtt_port
             ws_port = broker.actual_ws_port
-            assert mqtt_port is not None
-            assert ws_port is not None
+            assert_that(mqtt_port, is_(not_none()))
+            assert_that(ws_port, is_(not_none()))
 
             # Connect to both simultaneously
             tcp_reader, tcp_writer = await asyncio.open_connection(
@@ -300,8 +300,8 @@ class TestProtocolListening:
             )
 
             # Both connections should be open
-            assert not tcp_writer.is_closing()
-            assert not ws_writer.is_closing()
+            assert_that(tcp_writer.is_closing(), is_(False))
+            assert_that(ws_writer.is_closing(), is_(False))
 
             tcp_writer.close()
             ws_writer.close()

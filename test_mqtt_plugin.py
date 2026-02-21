@@ -39,7 +39,7 @@ class TestSaveLocationToDb(TestCase):
         result = save_location_to_db(location_data)
 
         assert_that(result, is_not(none()))
-        assert result is not None
+        assert_that(result, is_not(none()))
         assert_that(result, has_entries({
             "device_id_display": "testuser/phone",
             "latitude": "51.5074000000",
@@ -66,7 +66,7 @@ class TestSaveLocationToDb(TestCase):
         result = save_location_to_db(location_data)
 
         assert_that(result, is_not(none()))
-        assert result is not None
+        assert_that(result, is_not(none()))
         assert_that(result["device_id_display"], equal_to("user/device"))
 
     def test_save_location_exception(self) -> None:
@@ -147,7 +147,7 @@ class TestSaveLwtToDb(TestCase):
         result = save_lwt_to_db(lwt_data)
 
         assert_that(result, is_not(none()))
-        assert result is not None
+        assert_that(result, is_not(none()))
         assert_that(result, has_entries({
             "device_id": "user/phone",
             "is_online": False,

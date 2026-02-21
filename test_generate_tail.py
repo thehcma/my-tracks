@@ -14,15 +14,16 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from hamcrest import (assert_that, calling, close_to, equal_to, greater_than,
-                      has_entries, has_key, is_not, less_than, none, not_none)
+from hamcrest import (assert_that, calling, close_to, contains_string, equal_to,
+                     greater_than, has_entries, has_key, is_, is_not, less_than,
+                     none, not_none)
 
 # Import generate-tail as a module (it has a hyphen in the name and no .py extension)
 _loader = importlib.machinery.SourceFileLoader(
     "generate_tail", str(Path(__file__).parent / "generate-tail")
 )
 spec = importlib.util.spec_from_loader("generate_tail", _loader)
-assert spec is not None
+assert_that(spec, is_(not_none()))
 generate_tail = importlib.util.module_from_spec(spec)
 # Prevent auto-venv activation during test import
 with patch.object(sys, "executable", str(Path(__file__).parent / ".venv" / "bin" / "python")):
@@ -348,13 +349,13 @@ class TestFormatTimeFull:
 
     def test_formats_unix_timestamp(self) -> None:
         result = format_time_full(1700000000)
-        assert "UTC:" in result
-        assert "Local" in result
-        assert "2023" in result  # Nov 14, 2023
+        assert_that(result, contains_string("UTC:"))
+        assert_that(result, contains_string("Local"))
+        assert_that(result, contains_string("2023"))  # Nov 14, 2023
 
     def test_contains_both_timezones(self) -> None:
         result = format_time_full(0)
-        assert "UTC: 1970-01-01" in result
+        assert_that(result, contains_string("UTC: 1970-01-01"))
 
 
 # ============================================================
@@ -370,21 +371,21 @@ class TestPrintHelpers:
         tail_loc = {"lat": 37.01, "lon": -121.99, "tst": 1700000000}
         _print_location_info(1, 5, original, tail_loc, "src", "tl")
         captured = capsys.readouterr()
-        assert "[1/5]" in captured.out
-        assert "src" in captured.out
-        assert "tl" in captured.out
+        assert_that(captured.out, contains_string("[1/5]"))
+        assert_that(captured.out, contains_string("src"))
+        assert_that(captured.out, contains_string("tl"))
 
     def test_print_summary_dry_run(self, capsys: pytest.CaptureFixture[str]) -> None:
         _print_summary(10, 0, 0, dry_run=True)
         captured = capsys.readouterr()
-        assert "Dry run" in captured.out
-        assert "10" in captured.out
+        assert_that(captured.out, contains_string("Dry run"))
+        assert_that(captured.out, contains_string("10"))
 
     def test_print_summary_success(self, capsys: pytest.CaptureFixture[str]) -> None:
         _print_summary(10, 10, 0, dry_run=False)
         captured = capsys.readouterr()
-        assert "Sent: 10" in captured.out
-        assert "Failed: 0" in captured.out
+        assert_that(captured.out, contains_string("Sent: 10"))
+        assert_that(captured.out, contains_string("Failed: 0"))
 
     def test_print_summary_with_failures_raises_exit(self) -> None:
         import click
