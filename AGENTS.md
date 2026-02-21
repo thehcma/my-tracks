@@ -74,6 +74,7 @@ This document defines the four specialized agents for the OwnTracks Django backe
 - ✅ **Imports sorted with isort** (`uv run isort --check-only my_tracks config`)
 - ✅ No pytest warnings
 - ✅ VS Code Problems panel clear
+- ✅ **All test assertions use PyHamcrest** (`assert_that()` — no naked `assert` statements)
 - ✅ **CI/CD pipeline passes** (GitHub Actions at `.github/workflows/pr-validation.yml`)
   - Verifies Python 3.14 is used (latest stable)
   - Runs all tests with coverage check
@@ -317,6 +318,7 @@ This document defines the four specialized agents for the OwnTracks Django backe
 - [ ] **Timezone handling correct** (database stores UTC, displays show local time)
 - [ ] **VS Code Problems panel is clear** (no import errors, type errors, or linting issues)
 - [ ] **Tests run without warnings** (pytest should produce no warnings)
+- [ ] **All test assertions use PyHamcrest** (no naked `assert` — use `assert_that()` with matchers)
 - [ ] **CI/CD pipeline passes** (GitHub Actions workflow at `.github/workflows/pr-validation.yml`)
 
 ## Agent 2b: Secondary Critique Agent (GPT-5)
@@ -347,6 +349,7 @@ This document defines the four specialized agents for the OwnTracks Django backe
 - **Verify timezone handling correct** (database stores UTC, displays show local time)
 - **Verify VS Code Problems panel is clear** (use `get_errors()` tool)
 - **Verify tests run without warnings** (check pytest output for PytestWarnings)
+- **Verify all test assertions use PyHamcrest** (no naked `assert` — must use `assert_that()` with matchers)
 - **Verify CI/CD pipeline passes** (check GitHub Actions at `.github/workflows/pr-validation.yml`)
 
 **When to Use**:
@@ -364,6 +367,7 @@ This document defines the four specialized agents for the OwnTracks Django backe
 **Responsibilities**:
 - Write unit tests using pytest framework
 - Use PyHamcrest matchers for expressive assertions
+- **NEVER use naked `assert` statements** — always use `assert_that()` with PyHamcrest matchers
 - Cover all normal use cases with various input sizes
 - Verify percentile calculation accuracy against known values
 - **Achieve minimum 90% code coverage** (verified with `uv run pytest --cov=my_tracks --cov-fail-under=90`)
@@ -376,10 +380,20 @@ This document defines the four specialized agents for the OwnTracks Django backe
 
 **Testing Strategy**:
 - Use PyHamcrest matchers: `assert_that()`, `equal_to()`, `close_to()`, `raises()`
+- **NEVER use naked `assert`** — every assertion must use `assert_that()` with a matcher
+- Common matchers: `is_()`, `is_not()`, `none()`, `not_none()`, `instance_of()`, `greater_than()`, `less_than()`, `contains_string()`, `has_item()`, `has_length()`, `has_entries()`, `has_key()`, `any_of()`, `calling().raises()`
+- Examples:
+  - ✅ `assert_that(result, is_(not_none()))` instead of ❌ `assert result is not None`
+  - ✅ `assert_that(value, greater_than(0))` instead of ❌ `assert value > 0`
+  - ✅ `assert_that(items, instance_of(list))` instead of ❌ `assert isinstance(items, list)`
+  - ✅ `assert_that(text, contains_string("foo"))` instead of ❌ `assert "foo" in text`
+  - ✅ `assert_that(flag, is_(True))` instead of ❌ `assert flag`
+- Rationale: Consistent assertion style, better error messages on failure, expressive test intent
 
 **Quality Gates**:
 - [ ] All traditional unit tests pass
 - [ ] **90% minimum code coverage achieved** (run `uv run pytest --cov=my_tracks --cov-fail-under=90`)
 - [ ] **VS Code Problems panel is clear** (no errors in test files)
 - [ ] **Tests run without warnings** (no PytestWarnings or configuration issues)
+- [ ] **All test assertions use PyHamcrest** (no naked `assert` — use `assert_that()` with matchers)
 - [ ] **CI/CD pipeline passes** (GitHub Actions workflow at `.github/workflows/pr-validation.yml`)

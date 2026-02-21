@@ -49,7 +49,7 @@ class TestRuntimeConfig:
 
         with patch("config.runtime.CONFIG_FILE", config_file):
             write_runtime_config({"mqtt_port": 1885})
-            assert config_file.exists()
+            assert_that(config_file.exists(), is_(True))
             data = json.loads(config_file.read_text())
             assert_that(data["mqtt_port"], is_(equal_to(1885)))
 
