@@ -413,6 +413,12 @@ a:hover {
     min-width: 200px;
 }
 
+.time-slider-track-row {
+    display: flex;
+    align-items: center;
+    min-height: 20px;
+}
+
 .time-slider {
     width: 100%;
     min-width: 140px;
@@ -426,21 +432,22 @@ a:hover {
     text-align: center;
 }
 
-/* noUiSlider theme overrides */
-.time-slider .noUi-target {
+/* noUiSlider theme overrides — selectors must beat the bundled
+   .noUi-horizontal { height: 18px } coming from web_ui/js/main.css */
+.time-slider.noUi-target,
+.time-slider.noUi-horizontal {
     background: var(--border-color);
     border: none;
-    border-radius: 3px;
-    height: 6px;
+    border-radius: 2px;
+    height: 2px;
     box-shadow: none;
 }
 
 .time-slider .noUi-connect {
     background: #007bff;
-    border-radius: 3px;
+    border-radius: 2px;
 }
 
-.time-slider .noUi-handle,
 .time-slider.noUi-horizontal .noUi-handle {
     width: 14px;
     height: 14px;
@@ -449,7 +456,7 @@ a:hover {
     border: 1.5px solid white;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     cursor: pointer;
-    top: -5px;
+    top: -7px;
     right: -7px;
 }
 
@@ -467,24 +474,34 @@ a:hover {
     box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.3);
 }
 
+/* precision-slider-container restored as standalone column box */
+
 .precision-slider-container {
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    gap: 4px;
     background: var(--endpoint-bg);
     border: 1px solid var(--border-color);
     border-radius: 6px;
-    padding: 4px 10px;
+    padding: 10px 16px 6px;
+}
+
+.precision-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 20px;
 }
 
 .precision-slider {
     width: 80px;
-    height: 6px;
+    height: 2px;
     cursor: pointer;
     -webkit-appearance: none;
     appearance: none;
     background: var(--border-color);
-    border-radius: 3px;
+    border-radius: 2px;
+    margin: 6px 0;
 }
 
 .precision-slider::-webkit-slider-thumb {
@@ -523,8 +540,8 @@ a:hover {
 .precision-value {
     font-size: 11px;
     font-weight: bold;
-    min-width: 32px;
     color: var(--text-main);
+    text-align: center;
 }
 
 .mode-toggle {
