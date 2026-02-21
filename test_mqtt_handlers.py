@@ -105,7 +105,7 @@ class TestExtractLocationData:
         result = extract_location_data(message, topic_info)
 
         assert_that(result, has_entries(
-            device="john/phone",
+            device="phone",
             latitude=51.5074,
             longitude=-0.1278,
             tracker_id="JD",
@@ -128,7 +128,7 @@ class TestExtractLocationData:
         result = extract_location_data(message, topic_info)
 
         assert_that(result, has_entries(
-            device="john/phone",
+            device="phone",
             latitude=51.5,
             longitude=-0.1,
         ))
@@ -233,7 +233,7 @@ class TestExtractLwtData:
         result = extract_lwt_data(message, topic_info)
 
         assert_that(result, has_entries(
-            device="john/phone",
+            device="phone",
             event="offline",
         ))
         assert_that(result, has_key("connected_at"))
@@ -247,7 +247,7 @@ class TestExtractLwtData:
         result = extract_lwt_data(message, topic_info)
 
         assert_that(result, has_entries(
-            device="john/phone",
+            device="phone",
             event="offline",
         ))
         assert_that(result["connected_at"], is_(none()))
@@ -281,7 +281,7 @@ class TestExtractTransitionData:
         result = extract_transition_data(message, topic_info)
 
         assert_that(result, has_entries(
-            device="john/phone",
+            device="phone",
             event="enter",
             description="Home",
             latitude=51.5,
@@ -303,7 +303,7 @@ class TestExtractTransitionData:
         result = extract_transition_data(message, topic_info)
 
         assert_that(result, has_entries(
-            device="john/phone",
+            device="phone",
             event="leave",
         ))
 
@@ -354,7 +354,7 @@ class TestOwnTracksMessageHandler:
 
         assert_that(len(received_data), equal_to(1))
         assert_that(received_data[0], has_entries(
-            device="john/phone",
+            device="phone",
             latitude=51.5,
         ))
 
@@ -375,7 +375,7 @@ class TestOwnTracksMessageHandler:
 
         assert_that(len(received_data), equal_to(1))
         assert_that(received_data[0], has_entries(
-            device="john/phone",
+            device="phone",
             event="offline",
         ))
 
@@ -401,7 +401,7 @@ class TestOwnTracksMessageHandler:
 
         assert_that(len(received_data), equal_to(1))
         assert_that(received_data[0], has_entries(
-            device="john/phone",
+            device="phone",
             event="enter",
         ))
 
