@@ -38,24 +38,34 @@ def get_default_config(
 
     Returns:
         Configuration dictionary for amqtt Broker
+
+    Note:
+        When using the ``plugins`` dict config style, amqtt ignores
+        the top-level ``auth`` section.  Authentication must be handled
+        by including an auth plugin directly in the ``plugins`` dict
+        (e.g. ``AnonymousAuthPlugin`` or ``DjangoAuthPlugin``).
     """
-    plugins = [
-        "amqtt.plugins.sys.broker.BrokerSysPlugin",
-    ]
+    # Use dict-style plugin config so each plugin can receive its own
+    # configuration dataclass via dacite.
+    plugins: dict[str, dict[str, Any]] = {
+        "amqtt.plugins.sys.broker.BrokerSysPlugin": {},
+    }
+
+    # Add authentication plugin — amqtt requires at least one
+    # BaseAuthPlugin in the plugins dict, otherwise _authenticate()
+    # rejects every connection ("no plugin responded with a boolean").
+    if use_django_auth and not allow_anonymous:
+        plugins["my_tracks.mqtt.auth.DjangoAuthPlugin"] = {}
+    else:
+        # AnonymousAuthPlugin.Config defaults allow_anonymous=True;
+        # pass it explicitly for clarity.
+        plugins["amqtt.plugins.authentication.AnonymousAuthPlugin"] = {
+            "allow_anonymous": allow_anonymous,
+        }
 
     # Add OwnTracks handler plugin if requested (requires Django)
     if use_owntracks_handler:
-        plugins.append("my_tracks.mqtt.plugin.OwnTracksPlugin")
-
-    auth_config: dict[str, Any] = {
-        "allow-anonymous": allow_anonymous,
-    }
-
-    if use_django_auth:
-        plugins.append("my_tracks.mqtt.auth.DjangoAuthPlugin")
-        # When using Django auth, anonymous should typically be disabled
-        if not allow_anonymous:
-            auth_config["plugins"] = ["my_tracks.mqtt.auth.DjangoAuthPlugin"]
+        plugins["my_tracks.mqtt.plugin.OwnTracksPlugin"] = {}
 
     return {
         "listeners": {
@@ -71,7 +81,6 @@ def get_default_config(
             },
         },
         "sys_interval": 30,  # $SYS topic update interval in seconds
-        "auth": auth_config,
         "plugins": plugins,
     }
 

@@ -158,16 +158,17 @@ class TestGetDefaultConfigWithAuth:
         config = get_default_config()
         assert_that("my_tracks.mqtt.auth.DjangoAuthPlugin" in config["plugins"], is_(False))
 
-    def test_with_django_auth(self) -> None:
-        """Should include Django auth plugin when enabled."""
-        config = get_default_config(use_django_auth=True)
-        assert_that("my_tracks.mqtt.auth.DjangoAuthPlugin" in config["plugins"], is_(True))
+    def test_with_django_auth_anonymous_enabled(self) -> None:
+        """With django_auth=True but anonymous allowed, should use AnonymousAuthPlugin."""
+        config = get_default_config(use_django_auth=True, allow_anonymous=True)
+        assert_that("amqtt.plugins.authentication.AnonymousAuthPlugin" in config["plugins"], is_(True))
+        assert_that("my_tracks.mqtt.auth.DjangoAuthPlugin" in config["plugins"], is_(False))
 
     def test_django_auth_with_anonymous_disabled(self) -> None:
-        """Should configure auth plugins when anonymous disabled with Django auth."""
+        """Should use DjangoAuthPlugin when anonymous disabled with Django auth."""
         config = get_default_config(use_django_auth=True, allow_anonymous=False)
-        assert_that(config["auth"]["allow-anonymous"], is_(False))
-        assert_that("plugins" in config["auth"], is_(True))
+        assert_that("my_tracks.mqtt.auth.DjangoAuthPlugin" in config["plugins"], is_(True))
+        assert_that("amqtt.plugins.authentication.AnonymousAuthPlugin" in config["plugins"], is_(False))
 
 
 class TestDjangoAuthPlugin:
