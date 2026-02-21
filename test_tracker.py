@@ -153,26 +153,26 @@ class TestExtractDeviceId:
         }
         assert_that(extract_device_id(data), equal_to("my-device"))
 
-    def test_topic_extracts_user_slash_device(self) -> None:
-        """Test that topic returns user/device format matching MQTT handler."""
+    def test_topic_extracts_device_only(self) -> None:
+        """Test that topic returns device name only (ignoring user)."""
         from my_tracks.utils import extract_device_id
 
         data: dict[str, object] = {"topic": "owntracks/alice/phone"}
-        assert_that(extract_device_id(data), equal_to("alice/phone"))
+        assert_that(extract_device_id(data), equal_to("phone"))
 
-    def test_topic_with_subtopic_extracts_user_slash_device(self) -> None:
-        """Test that topic with extra path segments still returns user/device."""
+    def test_topic_with_subtopic_extracts_device_only(self) -> None:
+        """Test that topic with extra path segments still returns device name only."""
         from my_tracks.utils import extract_device_id
 
         data: dict[str, object] = {"topic": "owntracks/bob/tablet/event"}
-        assert_that(extract_device_id(data), equal_to("bob/tablet"))
+        assert_that(extract_device_id(data), equal_to("tablet"))
 
     def test_topic_preferred_over_tid(self) -> None:
         """Test that topic takes priority over tid."""
         from my_tracks.utils import extract_device_id
 
         data: dict[str, object] = {"topic": "owntracks/user/phone", "tid": "XY"}
-        assert_that(extract_device_id(data), equal_to("user/phone"))
+        assert_that(extract_device_id(data), equal_to("phone"))
 
     def test_tid_fallback_when_no_topic(self) -> None:
         """Test that tid is used when no device_id or topic is present."""
@@ -410,13 +410,13 @@ class TestLocationAPI:
         # OwnTracks expects 200, not 201
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
 
-        # Verify device was created with user/device ID from topic, not tid
-        device = Device.objects.get(device_id='user/hcma')
-        assert_that(device.device_id, equal_to('user/hcma'))
+        # Verify device was created with device ID from topic (device name only, not user/device)
+        device = Device.objects.get(device_id='hcma')
+        assert_that(device.device_id, equal_to('hcma'))
 
         # Verify location was created for correct device
         location = Location.objects.latest('id')
-        assert_that(location.device.device_id, equal_to('user/hcma'))
+        assert_that(location.device.device_id, equal_to('hcma'))
 
     def test_non_location_message_with_topic(self, api_client: APIClient) -> None:
         """Test that non-location messages extract device ID from topic."""
@@ -437,11 +437,11 @@ class TestLocationAPI:
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
         assert_that(response.data, equal_to([]))
 
-        # Verify message was stored with device from topic (user/device format)
+        # Verify message was stored with device from topic (device name only)
         message = OwnTracksMessage.objects.get(message_type='status')
         assert_that(message.device, is_not(none()))
         if message.device:  # Type guard for Pylance
-            assert_that(message.device.device_id, equal_to('user/testdevice'))
+            assert_that(message.device.device_id, equal_to('testdevice'))
 
     def test_list_locations(self, api_client: APIClient, sample_location: Location) -> None:
         """Test listing locations."""
