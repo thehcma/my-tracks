@@ -3,9 +3,11 @@
 import asyncio
 import atexit
 import logging
+import sys
 import threading
 from typing import Any
 
+from amqtt.errors import BrokerError
 from django.apps import AppConfig
 
 from config.runtime import CONFIG_FILE, get_mqtt_port, update_runtime_config
@@ -110,10 +112,43 @@ def _run_mqtt_broker(mqtt_port: int) -> None:
             logger.debug("MQTT broker event loop stopped (normal shutdown)")
         else:
             logger.exception("MQTT broker runtime error")
+    except BrokerError as exc:
+        cause = exc.__cause__
+        if isinstance(cause, OSError) and cause.errno == 48:
+            logger.warning(
+                "MQTT broker port %d already in use — is another server running?",
+                mqtt_port,
+            )
+        else:
+            logger.exception("MQTT broker failed to start")
     except Exception:
         logger.exception("MQTT broker error")
     finally:
         _state.loop.close()
+
+
+_ASGI_SERVER_BINARIES = {'daphne', 'uvicorn'}
+
+
+def _is_management_command() -> bool:
+    """Detect if the process is running a management command (not the server).
+
+    Returns True for commands like createsuperuser, migrate, makemigrations, etc.
+    Returns False for server processes (runserver, daphne) and unknown contexts.
+
+    Detection strategy:
+    - Direct ASGI servers (daphne, uvicorn) appear as sys.argv[0] binary name
+    - Django's runserver appears as sys.argv[1] via manage.py
+    - If neither matches and there's a command arg, it's a management command
+    """
+    from pathlib import PurePath
+
+    prog = PurePath(sys.argv[0]).stem
+    if prog in _ASGI_SERVER_BINARIES:
+        return False
+    if len(sys.argv) >= 2 and sys.argv[1] == 'runserver':
+        return False
+    return len(sys.argv) >= 2
 
 
 class MyTracksConfig(AppConfig):
@@ -126,12 +161,16 @@ class MyTracksConfig(AppConfig):
     def ready(self) -> None:
         """Start the MQTT broker if enabled in runtime config.
 
-        The broker only starts when a runtime config file exists (written
-        by the ``my-tracks-server`` script). This prevents the broker from
-        starting during tests or management commands.
+        The broker only starts when:
+        1. A runtime config file exists (written by ``my-tracks-server``)
+        2. The process is running the server (not a management command)
         """
         if not CONFIG_FILE.exists():
             logger.debug("No runtime config — skipping MQTT broker startup")
+            return
+
+        if _is_management_command():
+            logger.debug("Management command detected — skipping MQTT broker startup")
             return
 
         mqtt_port = get_mqtt_port()

@@ -210,6 +210,7 @@ class TestMqttBrokerStartup:
 
         with (
             patch.object(apps_module, "CONFIG_FILE", config_file),
+            patch.object(apps_module, "_is_management_command", return_value=False),
             patch.object(apps_module, "get_mqtt_port", return_value=1883),
             patch.object(apps_module._state, "thread", None),
             patch("threading.Thread", mock_thread_class),
@@ -254,6 +255,7 @@ class TestMqttBrokerStartup:
 
         with (
             patch.object(apps_module, "CONFIG_FILE", config_file),
+            patch.object(apps_module, "_is_management_command", return_value=False),
             patch.object(apps_module, "get_mqtt_port", return_value=-1),
             patch("threading.Thread") as mock_thread_class,
         ):
@@ -277,6 +279,7 @@ class TestMqttBrokerStartup:
 
         with (
             patch.object(apps_module, "CONFIG_FILE", config_file),
+            patch.object(apps_module, "_is_management_command", return_value=False),
             patch.object(apps_module, "get_mqtt_port", return_value=0),
             patch.object(apps_module._state, "thread", None),
             patch("threading.Thread", mock_thread_class),
@@ -525,6 +528,192 @@ class TestRunMqttBroker:
 
         mock_logger.exception.assert_called_once_with(
             "MQTT broker runtime error"
+        )
+
+
+class TestIsManagementCommand:
+    """Tests for _is_management_command detection.
+
+    IMPORTANT: Daphne/uvicorn argv[0] is the binary path, argv[1] is a flag
+    (e.g. "-b"), NOT the binary name. Tests MUST use realistic argv from the
+    actual server startup script (my-tracks-server) to prevent regressions.
+    """
+
+    # --- Realistic argv from my-tracks-server ---
+    # daphne -b 0.0.0.0 -p 8080 --verbosity 0 config.asgi:application
+    REAL_DAPHNE_ARGV = [
+        ".venv/bin/daphne", "-b", "0.0.0.0", "-p", "8080",
+        "--verbosity", "0", "config.asgi:application",
+    ]
+    REAL_UVICORN_ARGV = [
+        ".venv/bin/uvicorn", "config.asgi:application",
+        "--host", "0.0.0.0", "--port", "8080",
+    ]
+
+    def test_returns_true_for_createsuperuser(self) -> None:
+        """Management commands like createsuperuser are detected."""
+        from my_tracks.apps import _is_management_command
+
+        with patch("my_tracks.apps.sys") as mock_sys:
+            mock_sys.argv = ["manage.py", "createsuperuser"]
+            assert_that(_is_management_command(), is_(True))
+
+    def test_returns_true_for_migrate(self) -> None:
+        """The migrate command is detected as a management command."""
+        from my_tracks.apps import _is_management_command
+
+        with patch("my_tracks.apps.sys") as mock_sys:
+            mock_sys.argv = ["manage.py", "migrate"]
+            assert_that(_is_management_command(), is_(True))
+
+    def test_returns_true_for_makemigrations(self) -> None:
+        """The makemigrations command is detected."""
+        from my_tracks.apps import _is_management_command
+
+        with patch("my_tracks.apps.sys") as mock_sys:
+            mock_sys.argv = ["manage.py", "makemigrations"]
+            assert_that(_is_management_command(), is_(True))
+
+    def test_returns_true_for_shell(self) -> None:
+        """The shell command is detected as a management command."""
+        from my_tracks.apps import _is_management_command
+
+        with patch("my_tracks.apps.sys") as mock_sys:
+            mock_sys.argv = ["manage.py", "shell"]
+            assert_that(_is_management_command(), is_(True))
+
+    def test_returns_false_for_runserver(self) -> None:
+        """The runserver command is not considered a management command."""
+        from my_tracks.apps import _is_management_command
+
+        with patch("my_tracks.apps.sys") as mock_sys:
+            mock_sys.argv = ["manage.py", "runserver"]
+            assert_that(_is_management_command(), is_(False))
+
+    def test_returns_false_for_real_daphne_argv(self) -> None:
+        """Daphne detected via argv[0] binary name with real server argv."""
+        from my_tracks.apps import _is_management_command
+
+        with patch("my_tracks.apps.sys") as mock_sys:
+            mock_sys.argv = self.REAL_DAPHNE_ARGV
+            assert_that(_is_management_command(), is_(False))
+
+    def test_returns_false_for_real_uvicorn_argv(self) -> None:
+        """Uvicorn detected via argv[0] binary name with real server argv."""
+        from my_tracks.apps import _is_management_command
+
+        with patch("my_tracks.apps.sys") as mock_sys:
+            mock_sys.argv = self.REAL_UVICORN_ARGV
+            assert_that(_is_management_command(), is_(False))
+
+    def test_returns_false_when_no_args(self) -> None:
+        """Returns False when sys.argv has no command argument."""
+        from my_tracks.apps import _is_management_command
+
+        with patch("my_tracks.apps.sys") as mock_sys:
+            mock_sys.argv = ["manage.py"]
+            assert_that(_is_management_command(), is_(False))
+
+    def test_daphne_argv1_is_a_flag_not_binary_name(self) -> None:
+        """Guard: real daphne argv[1] is a flag, NOT 'daphne'.
+
+        This test exists to prevent the original bug where detection relied
+        on argv[1] containing the server name. Daphne puts flags in argv[1].
+        """
+        assert_that(
+            self.REAL_DAPHNE_ARGV[1], is_(equal_to("-b")),
+        )
+
+    def test_uvicorn_argv1_is_module_not_binary_name(self) -> None:
+        """Guard: real uvicorn argv[1] is the ASGI module, NOT 'uvicorn'."""
+        assert_that(
+            self.REAL_UVICORN_ARGV[1], is_(equal_to("config.asgi:application")),
+        )
+
+
+class TestSkipBrokerForManagementCommand:
+    """Tests for skipping broker startup during management commands."""
+
+    def test_skips_broker_for_management_command(self, tmp_path: Path) -> None:
+        """Broker does not start when running a management command."""
+        import my_tracks.apps as apps_module
+
+        config_file = tmp_path / ".runtime-config.json"
+        config_file.write_text(json.dumps({"mqtt_port": 0}))
+
+        with (
+            patch.object(apps_module, "CONFIG_FILE", config_file),
+            patch.object(apps_module, "_is_management_command", return_value=True),
+            patch("threading.Thread") as mock_thread_class,
+        ):
+            from my_tracks.apps import MyTracksConfig
+
+            app_config = MyTracksConfig("my_tracks", apps_module)
+            app_config.ready()
+
+        mock_thread_class.assert_not_called()
+
+
+class TestBrokerErrorHandling:
+    """Tests for graceful BrokerError handling in _run_mqtt_broker."""
+
+    def test_address_in_use_logs_warning(self) -> None:
+        """BrokerError wrapping errno 48 logs a warning instead of traceback."""
+        from amqtt.errors import BrokerError
+
+        import my_tracks.apps as apps_module
+
+        mock_broker = MagicMock()
+        os_error = OSError(48, "Address already in use")
+
+        async def mock_start() -> None:
+            raise BrokerError("Broker can't be started") from os_error
+
+        mock_broker.start = mock_start
+        mock_broker.is_running = True
+
+        with (
+            patch.object(apps_module, "MQTTBroker", return_value=mock_broker),
+            patch("my_tracks.apps.logger") as mock_logger,
+            patch.object(apps_module._state, "broker", None),
+            patch.object(apps_module._state, "loop", None),
+        ):
+            from my_tracks.apps import _run_mqtt_broker
+
+            _run_mqtt_broker(0)
+
+        mock_logger.warning.assert_called_once_with(
+            "MQTT broker port %d already in use — is another server running?",
+            0,
+        )
+        mock_logger.exception.assert_not_called()
+
+    def test_other_broker_error_logs_exception(self) -> None:
+        """BrokerError without address-in-use cause logs full exception."""
+        from amqtt.errors import BrokerError
+
+        import my_tracks.apps as apps_module
+
+        mock_broker = MagicMock()
+
+        async def mock_start() -> None:
+            raise BrokerError("Some other broker issue")
+
+        mock_broker.start = mock_start
+        mock_broker.is_running = True
+
+        with (
+            patch.object(apps_module, "MQTTBroker", return_value=mock_broker),
+            patch("my_tracks.apps.logger") as mock_logger,
+            patch.object(apps_module._state, "broker", None),
+            patch.object(apps_module._state, "loop", None),
+        ):
+            from my_tracks.apps import _run_mqtt_broker
+
+            _run_mqtt_broker(0)
+
+        mock_logger.exception.assert_called_once_with(
+            "MQTT broker failed to start"
         )
 
 

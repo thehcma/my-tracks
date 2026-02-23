@@ -336,6 +336,8 @@ This document defines the four specialized agents for the OwnTracks Django backe
 - [ ] **VS Code Problems panel is clear** (no import errors, type errors, or linting issues)
 - [ ] **Tests run without warnings** (pytest should produce no warnings)
 - [ ] **All test assertions use PyHamcrest** (no naked `assert` — use `assert_that()` with matchers)
+- [ ] **No hardcoded ports in tests** (use port `0` for OS allocation — never `1883`, `8080`, etc.)
+- [ ] **Test mock data matches real-world values** (e.g., `sys.argv` in tests must match actual process invocations, not idealized versions)
 - [ ] **CI/CD pipeline passes** (GitHub Actions workflow at `.github/workflows/pr-validation.yml`)
 
 ## Agent 2b: Secondary Critique Agent (GPT-5)
@@ -369,6 +371,8 @@ This document defines the four specialized agents for the OwnTracks Django backe
 - **Verify VS Code Problems panel is clear** (use `get_errors()` tool)
 - **Verify tests run without warnings** (check pytest output for PytestWarnings)
 - **Verify all test assertions use PyHamcrest** (no naked `assert` — must use `assert_that()` with matchers)
+- **Verify no hardcoded ports in tests** (use port `0` for OS allocation — never `1883`, `8080`, etc.)
+- **Verify test mock data matches real-world values** (e.g., `sys.argv` in tests must match actual process invocations, not idealized versions)
 - **Verify CI/CD pipeline passes** (check GitHub Actions at `.github/workflows/pr-validation.yml`)
 
 **When to Use**:
@@ -409,10 +413,25 @@ This document defines the four specialized agents for the OwnTracks Django backe
   - ✅ `assert_that(flag, is_(True))` instead of ❌ `assert flag`
 - Rationale: Consistent assertion style, better error messages on failure, expressive test intent
 
+**Port Handling in Tests**:
+- **NEVER hardcode well-known ports** (`1883`, `8080`, etc.) in test code
+- Use port `0` (OS-allocated) for any test that needs a port number
+- When port appears in assertions (e.g., log messages), assert against `0` not a well-known port
+- Rationale: Avoids port conflicts, tests should never depend on specific port availability
+
+**Mock Data Realism**:
+- **Test mock data MUST match real-world values**, not idealized versions
+- Before mocking `sys.argv`, CLI arguments, or process state, verify what the real values look like
+- Example: daphne's `sys.argv` is `[".venv/bin/daphne", "-b", "0.0.0.0", ...]` — NOT `["daphne", "daphne", ...]`
+- Add guard assertions that validate mock data structure (e.g., assert `argv[1]` is a flag, not a binary name)
+- Rationale: Prevents tests that confirm buggy assumptions instead of catching real bugs
+
 **Quality Gates**:
 - [ ] All traditional unit tests pass
 - [ ] **90% minimum code coverage achieved** (run `uv run pytest --cov=my_tracks --cov-fail-under=90`)
 - [ ] **VS Code Problems panel is clear** (no errors in test files)
 - [ ] **Tests run without warnings** (no PytestWarnings or configuration issues)
 - [ ] **All test assertions use PyHamcrest** (no naked `assert` — use `assert_that()` with matchers)
+- [ ] **No hardcoded ports** (use port `0` — never `1883`, `8080`, etc.)
+- [ ] **Mock data matches real-world values** (verify against actual process invocations)
 - [ ] **CI/CD pipeline passes** (GitHub Actions workflow at `.github/workflows/pr-validation.yml`)
