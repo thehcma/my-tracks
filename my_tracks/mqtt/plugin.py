@@ -176,13 +176,13 @@ class OwnTracksPlugin(BasePlugin[BrokerContext]):
             return
 
         logger.info(
-            "MQTT location saved: id=%s, device=%s",
+            "[MQTT] Location saved: id=%s, device=%s",
             serialized.get("id"),
             serialized.get("device_id_display"),
         )
 
         logger.info(
-            "📡 Broadcasting location to WebSocket (id=%s, device=%s)",
+            "[MQTT] 📡 Broadcasting location to WebSocket (id=%s, device=%s)",
             serialized.get("id"),
             serialized.get("device_id_display"),
         )
@@ -196,7 +196,7 @@ class OwnTracksPlugin(BasePlugin[BrokerContext]):
         device as offline in the database and broadcasts the status change.
         """
         logger.info(
-            "Device offline via MQTT LWT: device=%s",
+            "[MQTT] Device offline via LWT: device=%s",
             lwt_data.get("device"),
         )
 
@@ -206,7 +206,7 @@ class OwnTracksPlugin(BasePlugin[BrokerContext]):
             return
 
         logger.info(
-            "Device marked offline: device=%s",
+            "[MQTT] Device marked offline: device=%s",
             status_data.get("device_id"),
         )
 
@@ -220,7 +220,7 @@ class OwnTracksPlugin(BasePlugin[BrokerContext]):
         Transition messages indicate region enter/exit events.
         """
         logger.info(
-            "MQTT transition: device=%s, event=%s, region=%s",
+            "[MQTT] Transition: device=%s, event=%s, region=%s",
             transition_data.get("device"),
             transition_data.get("event"),
             transition_data.get("description"),
@@ -248,11 +248,11 @@ class OwnTracksPlugin(BasePlugin[BrokerContext]):
                 },
             )
             logger.info(
-                "✅ WebSocket broadcast completed for location %s",
+                "[MQTT] ✅ WebSocket broadcast completed for location %s",
                 location_data.get("id"),
             )
         except Exception:
-            logger.exception("WebSocket broadcast failed for MQTT location")
+            logger.exception("[MQTT] WebSocket broadcast failed")
 
     async def _broadcast_device_status(self, status_data: dict[str, Any]) -> None:
         """
@@ -275,12 +275,12 @@ class OwnTracksPlugin(BasePlugin[BrokerContext]):
                 },
             )
             logger.info(
-                "✅ WebSocket broadcast completed for device status: device=%s, online=%s",
+                "[MQTT] ✅ WebSocket broadcast completed for device status: device=%s, online=%s",
                 status_data.get("device_id"),
                 status_data.get("is_online"),
             )
         except Exception:
-            logger.exception("WebSocket broadcast failed for device status")
+            logger.exception("[MQTT] WebSocket broadcast failed for device status")
 
     # -- Protocol version check ------------------------------------------
 
