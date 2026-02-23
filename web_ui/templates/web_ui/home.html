@@ -53,6 +53,13 @@
                         </div>
                         <button class="header-toggle" id="sidebar-toggle" title="Toggle documentation sidebar" aria-label="Toggle sidebar">◀</button>
                         <button class="header-toggle" id="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle theme">🌙</button>
+                        <div class="user-menu">
+                            <span class="user-name" title="Logged in as {{ user.username }}">{{ user.username }}</span>
+                            <form method="post" action="{% url 'web_ui:logout' %}" class="logout-form">
+                                {% csrf_token %}
+                                <button type="submit" class="logout-button" title="Sign out">Logout</button>
+                            </form>
+                        </div>
                     </div>
                     <h2 id="map-title">🗺️ Live Map</h2>
                 </div>

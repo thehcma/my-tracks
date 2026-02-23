@@ -51,6 +51,17 @@ class TestWebUIViews:
         assert_that(response['Pragma'], equal_to('no-cache'))
         assert_that(response['Expires'], equal_to('0'))
 
+    def test_home_view_shows_username_and_logout(self, logged_in_client: Client) -> None:
+        """Test that the home view shows the logged-in username and a POST logout form."""
+        response = logged_in_client.get('/')
+
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('class="user-menu"'))
+        assert_that(content, contains_string('testuser'))
+        assert_that(content, contains_string('action="/logout/"'))
+        assert_that(content, contains_string('method="post"'))
+        assert_that(content, contains_string('Logout'))
+
     def test_home_redirects_unauthenticated(self) -> None:
         """Test that unauthenticated users are redirected to login."""
         client = Client()
