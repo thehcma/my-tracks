@@ -8,8 +8,8 @@ import netifaces
 import pytest
 from django.test import Client
 from hamcrest import (assert_that, contains_string, equal_to, greater_than,
-                     has_item, has_key, has_length, instance_of, is_, is_not,
-                     not_none)
+                      has_item, has_key, has_length, instance_of, is_, is_not,
+                      not_none)
 from rest_framework import status
 
 
@@ -17,28 +17,25 @@ from rest_framework import status
 class TestWebUIViews:
     """Test the web UI view functions."""
 
-    def test_home_view_returns_html(self) -> None:
+    def test_home_view_returns_html(self, logged_in_client: Client) -> None:
         """Test that the home view returns HTML content."""
-        client = Client()
-        response = client.get('/')
+        response = logged_in_client.get('/')
 
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
         assert_that(response['Content-Type'], contains_string('text/html'))
 
-    def test_home_view_contains_expected_elements(self) -> None:
+    def test_home_view_contains_expected_elements(self, logged_in_client: Client) -> None:
         """Test that the home view contains expected HTML elements."""
-        client = Client()
-        response = client.get('/')
+        response = logged_in_client.get('/')
 
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('<!DOCTYPE html>'))
         assert_that(content, contains_string('<title>My Tracks - OwnTracks Backend</title>'))
         assert_that(content, contains_string('leaflet'))  # Map library
 
-    def test_home_view_contains_historic_controls(self) -> None:
+    def test_home_view_contains_historic_controls(self, logged_in_client: Client) -> None:
         """Test that the home view contains date picker and time slider controls."""
-        client = Client()
-        response = client.get('/')
+        response = logged_in_client.get('/')
 
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('id="historic-controls"'))
@@ -46,17 +43,23 @@ class TestWebUIViews:
         assert_that(content, contains_string('id="time-slider"'))
         assert_that(content, contains_string('id="time-slider-label"'))
 
-    def test_home_view_no_cache_headers(self) -> None:
+    def test_home_view_no_cache_headers(self, logged_in_client: Client) -> None:
         """Test that the home view sets no-cache headers."""
-        client = Client()
-        response = client.get('/')
+        response = logged_in_client.get('/')
 
         assert_that(response['Cache-Control'], contains_string('no-cache'))
         assert_that(response['Pragma'], equal_to('no-cache'))
         assert_that(response['Expires'], equal_to('0'))
 
+    def test_home_redirects_unauthenticated(self) -> None:
+        """Test that unauthenticated users are redirected to login."""
+        client = Client()
+        response = client.get('/')
+        assert_that(response.status_code, equal_to(status.HTTP_302_FOUND))
+        assert_that(response.url, contains_string('/login/'))
+
     def test_health_endpoint_returns_ok(self) -> None:
-        """Test that the health endpoint returns status ok."""
+        """Test that the health endpoint returns status ok (no auth required)."""
         client = Client()
         response = client.get('/health/')
 
@@ -65,10 +68,9 @@ class TestWebUIViews:
         assert_that(data, has_key('status'))
         assert_that(data['status'], equal_to('ok'))
 
-    def test_network_info_returns_expected_fields(self) -> None:
+    def test_network_info_returns_expected_fields(self, logged_in_client: Client) -> None:
         """Test that network_info returns required fields."""
-        client = Client()
-        response = client.get('/network-info/', SERVER_PORT='8080')
+        response = logged_in_client.get('/network-info/', SERVER_PORT='8080')
 
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
         data = response.json()
@@ -217,74 +219,66 @@ class TestNetworkState:
 class TestMQTTEndpointDisplay:
     """Test MQTT endpoint display in web UI."""
 
-    def test_home_view_shows_http_enabled(self) -> None:
+    def test_home_view_shows_http_enabled(self, logged_in_client: Client) -> None:
         """Test that home view shows HTTP server as enabled."""
-        client = Client()
-        response = client.get('/')
+        response = logged_in_client.get('/')
 
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('HTTP Server'))
-        # HTTP is always enabled (you're viewing the page)
         assert_that(content, contains_string('● Enabled'))
 
-    def test_home_view_shows_mqtt_disabled_by_default(self) -> None:
+    def test_home_view_shows_mqtt_disabled_by_default(self, logged_in_client: Client) -> None:
         """Test that home view shows MQTT disabled when port < 0."""
         from unittest.mock import patch
 
-        client = Client()
         with patch('web_ui.views.get_mqtt_port', return_value=-1):
-            response = client.get('/')
+            response = logged_in_client.get('/')
 
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('○ Disabled'))
         assert_that(content, contains_string('--mqtt-port 1883'))
 
-    def test_home_view_shows_mqtt_enabled(self) -> None:
+    def test_home_view_shows_mqtt_enabled(self, logged_in_client: Client) -> None:
         """Test that home view shows MQTT info when enabled."""
         from unittest.mock import patch
 
-        client = Client()
         with (
             patch('web_ui.views.get_mqtt_port', return_value=1883),
             patch('web_ui.views.get_actual_mqtt_port', return_value=None),
         ):
-            response = client.get('/')
+            response = logged_in_client.get('/')
 
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('● Enabled'))
         assert_that(content, contains_string('1883'))
         assert_that(content, contains_string('MQTT Broker'))
 
-    def test_home_view_shows_actual_mqtt_port(self) -> None:
+    def test_home_view_shows_actual_mqtt_port(self, logged_in_client: Client) -> None:
         """Test that home view shows actual port when OS-allocated."""
         from unittest.mock import patch
 
-        client = Client()
         with (
             patch('web_ui.views.get_mqtt_port', return_value=0),
             patch('web_ui.views.get_actual_mqtt_port', return_value=54321),
         ):
-            response = client.get('/')
+            response = logged_in_client.get('/')
 
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('54321'))
 
-    def test_home_view_shows_mqtt_config_instructions(self) -> None:
+    def test_home_view_shows_mqtt_config_instructions(self, logged_in_client: Client) -> None:
         """Test that home view shows MQTT configuration instructions when enabled."""
         from unittest.mock import patch
 
-        client = Client()
         with (
             patch('web_ui.views.get_mqtt_port', return_value=1883),
             patch('web_ui.views.get_actual_mqtt_port', return_value=None),
         ):
-            response = client.get('/')
+            response = logged_in_client.get('/')
 
         content = response.content.decode('utf-8')
-        # Should show MQTT mode option
         assert_that(content, contains_string('MQTT (Recommended)'))
         assert_that(content, contains_string('For MQTT Mode'))
-        # Should also show HTTP mode option
         assert_that(content, contains_string('For HTTP Mode'))
 
 
@@ -418,17 +412,14 @@ class TestThemeHTMLIntegration:
         html = HTML_PATH.read_text()
         assert_that(html, contains_string("main.css"))
 
-    def test_home_response_has_theme_toggle(self) -> None:
+    def test_home_response_has_theme_toggle(self, logged_in_client: Client) -> None:
         """Rendered home page must contain the theme toggle button."""
-        client = Client()
-        response = client.get('/')
+        response = logged_in_client.get('/')
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('id="theme-toggle"'))
 
-    def test_home_response_has_data_theme_support(self) -> None:
+    def test_home_response_has_data_theme_support(self, logged_in_client: Client) -> None:
         """Rendered page must include JS that sets data-theme attribute."""
-        client = Client()
-        response = client.get('/')
+        response = logged_in_client.get('/')
         content = response.content.decode('utf-8')
-        # The compiled JS is loaded via staticfiles (may have hash in filename)
         assert_that(content, contains_string('/static/web_ui/js/main.'))

@@ -10,19 +10,22 @@ from typing import Any
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.contrib.auth.models import User
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from .auth import CommandApiKeyAuthentication, get_command_api_key
-from .models import Device, Location, OwnTracksMessage
+from .models import Device, Location, OwnTracksMessage, UserProfile
 from .mqtt.commands import Command, CommandPublisher
-from .serializers import DeviceSerializer, LocationSerializer
+from .serializers import (ChangePasswordSerializer, DeviceSerializer,
+                          LocationSerializer, UserProfileSerializer,
+                          UserSerializer)
 from .utils import extract_device_id
 
 logger = logging.getLogger(__name__)
@@ -34,14 +37,19 @@ class LocationViewSet(viewsets.ModelViewSet):
     ViewSet for managing location data.
 
     Provides endpoints for:
-    - POST: Receive location data from OwnTracks clients
-    - GET: Query location history
+    - POST: Receive location data from OwnTracks clients (AllowAny — devices use their own auth)
+    - GET: Query location history (requires authentication)
     - Filter by device, date range, etc.
     """
 
     queryset = Location.objects.all()
     serializer_class = LocationSerializer
-    permission_classes = [AllowAny]
+
+    def get_permissions(self) -> list[object]:
+        """Allow unauthenticated OwnTracks device POSTs; require auth for reads."""
+        if self.action == 'create':
+            return [AllowAny()]
+        return [IsAuthenticated()]
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """
@@ -511,5 +519,137 @@ class CommandViewSet(viewsets.ViewSet):
         return Response(
             {"error": "Failed to send command", "device_id": device_id},
             status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+class AccountViewSet(viewsets.ViewSet):
+    """
+    Self-service account management for the authenticated user.
+
+    Endpoints:
+    - GET /api/account/ — retrieve current user profile
+    - PATCH /api/account/ — update profile fields
+    - POST /api/account/change-password/ — change password
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request: Request) -> Response:
+        """Return the authenticated user's profile."""
+        serializer = UserProfileSerializer(request.user.profile)
+        return Response(serializer.data)
+
+    def partial_update(self, request: Request, pk: str | None = None) -> Response:
+        """Update the authenticated user's profile and user fields."""
+        user = request.user
+        profile = user.profile
+        data: dict[str, Any] = {
+            str(k): v for k, v in (
+                request.data.items() if hasattr(request.data, 'items') else []
+            )
+        }
+
+        user_fields = {'first_name', 'last_name', 'email'}
+        user_changed = False
+        for field in user_fields:
+            if field in data:
+                setattr(user, field, data[field])
+                user_changed = True
+        if user_changed:
+            user.save()
+
+        serializer = UserProfileSerializer(profile, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(UserProfileSerializer(profile).data)
+
+    @action(detail=False, methods=['post'], url_path='change-password')
+    def change_password(self, request: Request) -> Response:
+        """Change the authenticated user's password."""
+        serializer = ChangePasswordSerializer(
+            data=request.data, context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        validated: dict[str, Any] = serializer.validated_data  # type: ignore[assignment]
+        request.user.set_password(validated['new_password'])
+        request.user.save()
+        return Response({"detail": "Password updated successfully."})
+
+
+class AdminUserViewSet(viewsets.ViewSet):
+    """
+    Admin-only user management.
+
+    Endpoints:
+    - GET /api/admin/users/ — list all users
+    - POST /api/admin/users/ — create a new user
+    - DELETE /api/admin/users/{id}/ — deactivate a user
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def list(self, request: Request) -> Response:
+        """List all users."""
+        users = User.objects.all().order_by('username')
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data)
+
+    def create(self, request: Request) -> Response:
+        """Create a new user."""
+        username = request.data.get('username')
+        if not username:
+            return Response(
+                {"error": "username is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if User.objects.filter(username=username).exists():
+            return Response(
+                {"error": f"User '{username}' already exists"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        password = request.data.get('password')
+        if not password:
+            return Response(
+                {"error": "password is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = User.objects.create_user(
+            username=username,
+            email=request.data.get('email', ''),
+            password=password,
+            first_name=request.data.get('first_name', ''),
+            last_name=request.data.get('last_name', ''),
+        )
+
+        return Response(
+            UserSerializer(user).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def destroy(self, request: Request, pk: str | None = None) -> Response:
+        """Deactivate a user (soft delete)."""
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid user ID, got '{pk}' which does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if user == request.user:
+            return Response(
+                {"error": "Cannot deactivate your own account"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.is_active = False
+        user.save()
+        return Response(
+            {"detail": f"User '{user.username}' has been deactivated."},
+            status=status.HTTP_200_OK,
         )
 
