@@ -181,7 +181,11 @@ class OwnTracksPlugin(BasePlugin[BrokerContext]):
             serialized.get("device_id_display"),
         )
 
-        # Broadcast via WebSocket
+        logger.info(
+            "📡 Broadcasting location to WebSocket (id=%s, device=%s)",
+            serialized.get("id"),
+            serialized.get("device_id_display"),
+        )
         await self._broadcast_location(serialized)
 
     async def _handle_lwt(self, lwt_data: dict[str, Any]) -> None:
@@ -243,8 +247,8 @@ class OwnTracksPlugin(BasePlugin[BrokerContext]):
                     "data": location_data,
                 },
             )
-            logger.debug(
-                "WebSocket broadcast sent for MQTT location id=%s",
+            logger.info(
+                "✅ WebSocket broadcast completed for location %s",
                 location_data.get("id"),
             )
         except Exception:
@@ -270,8 +274,8 @@ class OwnTracksPlugin(BasePlugin[BrokerContext]):
                     "data": status_data,
                 },
             )
-            logger.debug(
-                "WebSocket broadcast sent for device status: device=%s, online=%s",
+            logger.info(
+                "✅ WebSocket broadcast completed for device status: device=%s, online=%s",
                 status_data.get("device_id"),
                 status_data.get("is_online"),
             )
