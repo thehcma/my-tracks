@@ -5,7 +5,7 @@ description = "Django backend server for OwnTracks Android app"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "django>=5.0,<6.0",
+    "django>=5.0,<7.0",
     "djangorestframework>=3.14.0",
     "python-decouple>=3.8",
     "psycopg2-binary>=2.9.9",
