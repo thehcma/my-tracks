@@ -2,15 +2,16 @@
 Serializers for OwnTracks location tracking API.
 
 This module provides DRF serializers for converting between
-OwnTracks JSON payloads and Django model instances.
+OwnTracks JSON payloads and model instances.
 """
 import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import Device, Location
+from .models import Device, Location, UserProfile
 from .utils import extract_device_id
 
 logger = logging.getLogger(__name__)
@@ -146,7 +147,7 @@ class LocationSerializer(serializers.ModelSerializer):
         Validate and transform OwnTracks format to internal format.
 
         Converts OwnTracks field names (lat, lon, tst, etc.) to
-        Django model field names (latitude, longitude, timestamp, etc.).
+        internal model field names (latitude, longitude, timestamp, etc.).
 
         Args:
             attrs: Input attributes from request
@@ -246,3 +247,49 @@ class LocationSerializer(serializers.ModelSerializer):
             validated_data['ip_address'] = client_ip
 
         return super().create(validated_data)
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Serializer for User model (admin user management)."""
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name',
+            'is_active', 'is_staff', 'date_joined', 'last_login',
+        ]
+        read_only_fields = ['id', 'date_joined', 'last_login']
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    """Serializer for UserProfile with nested user fields."""
+
+    username = serializers.CharField(source='user.username', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    first_name = serializers.CharField(source='user.first_name', read_only=True)
+    last_name = serializers.CharField(source='user.last_name', read_only=True)
+    is_staff = serializers.BooleanField(source='user.is_staff', read_only=True)
+
+    class Meta:
+        model = UserProfile
+        fields = [
+            'username', 'email', 'first_name', 'last_name', 'is_staff',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Serializer for password change endpoint."""
+
+    current_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True, min_length=8)
+
+    def validate_current_password(self, value: str) -> str:
+        """Verify the current password is correct."""
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError(
+                "Current password is incorrect"
+            )
+        return value

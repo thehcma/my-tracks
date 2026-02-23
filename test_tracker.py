@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 import pytest
+from django.test import Client
 from django.utils import timezone
 from hamcrest import (all_of, assert_that, contains_string, equal_to,
                       greater_than, greater_than_or_equal_to, has_key,
@@ -232,24 +233,24 @@ class TestOptionalTrailingSlash:
         )
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
 
-    def test_get_locations_with_slash(self, api_client: APIClient) -> None:
+    def test_get_locations_with_slash(self, auth_api_client: APIClient) -> None:
         """GET /api/locations/ (with slash) should succeed."""
-        response = api_client.get("/api/locations/")
+        response = auth_api_client.get("/api/locations/")
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
 
-    def test_get_locations_without_slash(self, api_client: APIClient) -> None:
+    def test_get_locations_without_slash(self, auth_api_client: APIClient) -> None:
         """GET /api/locations (without slash) should succeed."""
-        response = api_client.get("/api/locations")
+        response = auth_api_client.get("/api/locations")
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
 
-    def test_get_devices_with_slash(self, api_client: APIClient) -> None:
+    def test_get_devices_with_slash(self, auth_api_client: APIClient) -> None:
         """GET /api/devices/ (with slash) should succeed."""
-        response = api_client.get("/api/devices/")
+        response = auth_api_client.get("/api/devices/")
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
 
-    def test_get_devices_without_slash(self, api_client: APIClient) -> None:
+    def test_get_devices_without_slash(self, auth_api_client: APIClient) -> None:
         """GET /api/devices (without slash) should succeed."""
-        response = api_client.get("/api/devices")
+        response = auth_api_client.get("/api/devices")
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
 
 
@@ -443,9 +444,9 @@ class TestLocationAPI:
         if message.device:  # Type guard for Pylance
             assert_that(message.device.device_id, equal_to('testdevice'))
 
-    def test_list_locations(self, api_client: APIClient, sample_location: Location) -> None:
+    def test_list_locations(self, auth_api_client: APIClient, sample_location: Location) -> None:
         """Test listing locations."""
-        response = api_client.get('/api/locations/')
+        response = auth_api_client.get('/api/locations/')
 
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
         assert_that(response.data, has_key('results'))
@@ -453,7 +454,7 @@ class TestLocationAPI:
 
     def test_filter_locations_by_device(
         self,
-        api_client: APIClient,
+        auth_api_client: APIClient,
         sample_device: Device
     ) -> None:
         """Test filtering locations by device."""
@@ -473,7 +474,7 @@ class TestLocationAPI:
             timestamp=timezone.now()
         )
 
-        response = api_client.get(
+        response = auth_api_client.get(
             '/api/locations/',
             {'device': 'TEST01'}
         )
@@ -485,7 +486,7 @@ class TestLocationAPI:
 
     def test_filter_locations_by_date_range(
         self,
-        api_client: APIClient,
+        auth_api_client: APIClient,
         sample_device: Device
     ) -> None:
         """Test filtering locations by date range."""
@@ -513,7 +514,7 @@ class TestLocationAPI:
 
         # Filter for last day
         start_date = (now - timedelta(days=1, hours=1)).isoformat()
-        response = api_client.get(
+        response = auth_api_client.get(
             '/api/locations/',
             {'start_date': start_date}
         )
@@ -523,7 +524,7 @@ class TestLocationAPI:
 
     def test_filter_locations_by_unix_timestamp(
         self,
-        api_client: APIClient,
+        auth_api_client: APIClient,
         sample_device: Device
     ) -> None:
         """Test filtering locations by Unix timestamp (start_time)."""
@@ -551,7 +552,7 @@ class TestLocationAPI:
 
         # Test filtering by start_time (Unix timestamp)
         start_time = int((now - timedelta(hours=2)).timestamp())
-        response = api_client.get(
+        response = auth_api_client.get(
             '/api/locations/',
             {'start_time': start_time, 'device': sample_device.device_id}
         )
@@ -562,7 +563,7 @@ class TestLocationAPI:
 
     def test_filter_locations_by_end_time(
         self,
-        api_client: APIClient,
+        auth_api_client: APIClient,
         sample_device: Device
     ) -> None:
         """Test filtering locations by end_time Unix timestamp."""
@@ -590,7 +591,7 @@ class TestLocationAPI:
 
         # Filter with end_time = 2 hours ago (should only get the oldest location)
         end_time = int((now - timedelta(hours=2)).timestamp())
-        response = api_client.get(
+        response = auth_api_client.get(
             '/api/locations/',
             {'end_time': end_time, 'device': sample_device.device_id}
         )
@@ -601,7 +602,7 @@ class TestLocationAPI:
 
     def test_filter_locations_by_start_and_end_time(
         self,
-        api_client: APIClient,
+        auth_api_client: APIClient,
         sample_device: Device
     ) -> None:
         """Test filtering locations by both start_time and end_time."""
@@ -630,7 +631,7 @@ class TestLocationAPI:
         # Filter window: 3 hours ago to 1 hour ago (should get middle location only)
         start_time = int((now - timedelta(hours=3)).timestamp())
         end_time = int((now - timedelta(hours=1)).timestamp())
-        response = api_client.get(
+        response = auth_api_client.get(
             '/api/locations/',
             {
                 'start_time': start_time,
@@ -645,11 +646,11 @@ class TestLocationAPI:
 
     def test_filter_locations_by_invalid_end_time(
         self,
-        api_client: APIClient,
+        auth_api_client: APIClient,
         sample_device: Device
     ) -> None:
         """Test end_time with invalid value returns 400."""
-        response = api_client.get(
+        response = auth_api_client.get(
             '/api/locations/',
             {'end_time': 'not-a-number', 'device': sample_device.device_id}
         )
@@ -662,17 +663,17 @@ class TestLocationAPI:
 class TestDeviceAPI:
     """Tests for Device API endpoints."""
 
-    def test_list_devices(self, api_client: APIClient, sample_device: Device) -> None:
+    def test_list_devices(self, auth_api_client: APIClient, sample_device: Device) -> None:
         """Test listing devices."""
-        response = api_client.get('/api/devices/')
+        response = auth_api_client.get('/api/devices/')
 
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
         assert_that(response.data, has_key('results'))
         assert_that(response.data['results'], has_length(greater_than_or_equal_to(1)))
 
-    def test_get_device_detail(self, api_client: APIClient, sample_device: Device) -> None:
+    def test_get_device_detail(self, auth_api_client: APIClient, sample_device: Device) -> None:
         """Test retrieving device details."""
-        response = api_client.get(f'/api/devices/{sample_device.device_id}/')
+        response = auth_api_client.get(f'/api/devices/{sample_device.device_id}/')
 
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
         assert_that(response.data['device_id'], equal_to('TEST01'))
@@ -680,12 +681,12 @@ class TestDeviceAPI:
 
     def test_get_device_locations(
         self,
-        api_client: APIClient,
+        auth_api_client: APIClient,
         sample_device: Device,
         sample_location: Location
     ) -> None:
         """Test getting locations for a specific device."""
-        response = api_client.get(
+        response = auth_api_client.get(
             f'/api/devices/{sample_device.device_id}/locations/'
         )
 
@@ -699,7 +700,7 @@ class TestResolutionThinning:
     """Test cases for the resolution-based waypoint thinning feature."""
 
     def test_resolution_always_includes_first_and_last_points(
-        self, api_client: APIClient, sample_device: Device
+        self, auth_api_client: APIClient, sample_device: Device
     ) -> None:
         """Test that coarse resolution always includes first and last waypoints."""
         base_time = timezone.now() - timedelta(hours=1)
@@ -718,7 +719,7 @@ class TestResolutionThinning:
 
         # Request with 6-minute resolution (should get ~3-4 points: first, middle, last)
         start_time = int((base_time - timedelta(minutes=1)).timestamp())
-        response = api_client.get(
+        response = auth_api_client.get(
             f'/api/locations/?device={sample_device.device_id}'
             f'&start_time={start_time}&resolution=360'
         )
@@ -742,7 +743,7 @@ class TestResolutionThinning:
         assert_that(last_result_ts, equal_to(first_location_ts))  # oldest last
 
     def test_resolution_thins_to_expected_interval(
-        self, api_client: APIClient, sample_device: Device
+        self, auth_api_client: APIClient, sample_device: Device
     ) -> None:
         """Test that resolution parameter thins waypoints to expected intervals."""
         base_time = timezone.now() - timedelta(hours=1)
@@ -760,7 +761,7 @@ class TestResolutionThinning:
         # Request with 6-minute resolution (360 seconds)
         # Should get ~10 points per hour plus first/last
         start_time = int((base_time - timedelta(minutes=1)).timestamp())
-        response = api_client.get(
+        response = auth_api_client.get(
             f'/api/locations/?device={sample_device.device_id}'
             f'&start_time={start_time}&resolution=360'
         )
@@ -774,7 +775,7 @@ class TestResolutionThinning:
         assert_that(len(results), is_not(greater_than_or_equal_to(30)))
 
     def test_medium_resolution_thins_to_three_minute_interval(
-        self, api_client: APIClient, sample_device: Device
+        self, auth_api_client: APIClient, sample_device: Device
     ) -> None:
         """Test that medium resolution (180s) provides ~20 points per hour."""
         base_time = timezone.now() - timedelta(hours=1)
@@ -792,7 +793,7 @@ class TestResolutionThinning:
         # Request with 3-minute resolution (180 seconds)
         # Should get ~20 points per hour plus first/last
         start_time = int((base_time - timedelta(minutes=1)).timestamp())
-        response = api_client.get(
+        response = auth_api_client.get(
             f'/api/locations/?device={sample_device.device_id}'
             f'&start_time={start_time}&resolution=180'
         )
@@ -808,7 +809,7 @@ class TestResolutionThinning:
         assert_that(len(results), greater_than_or_equal_to(15))
 
     def test_resolution_zero_returns_all_points(
-        self, api_client: APIClient, sample_device: Device
+        self, auth_api_client: APIClient, sample_device: Device
     ) -> None:
         """Test that resolution=0 returns all points without thinning, bypassing pagination."""
         base_time = timezone.now() - timedelta(hours=1)
@@ -826,7 +827,7 @@ class TestResolutionThinning:
         start_time = int((base_time - timedelta(minutes=1)).timestamp())
 
         # Request with resolution=0 should return all points (bypasses pagination)
-        response = api_client.get(
+        response = auth_api_client.get(
             f'/api/locations/?device={sample_device.device_id}'
             f'&start_time={start_time}&resolution=0'
         )
@@ -839,7 +840,7 @@ class TestResolutionThinning:
         assert_that(response.data.get('resolution_applied'), equal_to(0))
 
     def test_resolution_zero_returns_more_points_than_coarse(
-        self, api_client: APIClient, sample_device: Device
+        self, auth_api_client: APIClient, sample_device: Device
     ) -> None:
         """Test that resolution=0 (100% precision) returns more points than resolution=360 (0%)."""
         base_time = timezone.now() - timedelta(hours=1)
@@ -857,7 +858,7 @@ class TestResolutionThinning:
         start_time = int((base_time - timedelta(minutes=1)).timestamp())
 
         # Request with resolution=0 (100% precision slider)
-        response_full = api_client.get(
+        response_full = auth_api_client.get(
             f'/api/locations/?device={sample_device.device_id}'
             f'&start_time={start_time}&resolution=0'
         )
@@ -865,7 +866,7 @@ class TestResolutionThinning:
         full_results = response_full.data['results']
 
         # Request with resolution=360 (0% precision slider)
-        response_coarse = api_client.get(
+        response_coarse = auth_api_client.get(
             f'/api/locations/?device={sample_device.device_id}'
             f'&start_time={start_time}&resolution=360'
         )
@@ -884,9 +885,9 @@ class TestResolutionThinning:
 class TestHomeView:
     """Tests for the home page view."""
 
-    def test_home_page_includes_collapse_precision(self, api_client: APIClient) -> None:
+    def test_home_page_includes_collapse_precision(self, logged_in_client: Client) -> None:
         """Test that the home page includes the collapse precision derived from DB."""
-        response = api_client.get('/')
+        response = logged_in_client.get('/')
 
         assert_that(response.status_code, equal_to(status.HTTP_200_OK))
 

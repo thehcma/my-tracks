@@ -5,6 +5,7 @@ import socket
 
 import netifaces
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 
@@ -37,7 +38,7 @@ def get_all_local_ips() -> list[str]:
 
 def update_allowed_hosts(ips: list[str]) -> None:
     """
-    Dynamically add discovered local IPs to Django's ALLOWED_HOSTS.
+    Dynamically add discovered local IPs to ALLOWED_HOSTS.
 
     Only adds IPs that aren't already in the list. This ensures the server
     accepts requests on all its network interfaces without manual configuration.
@@ -110,6 +111,7 @@ def health(request: HttpRequest) -> JsonResponse:
     return JsonResponse({'status': 'ok'})
 
 
+@login_required
 def network_info(request: HttpRequest) -> JsonResponse:
     """Return current network information for dynamic UI updates."""
     ips, _ = NetworkState.check_and_update_ips()
@@ -124,6 +126,7 @@ def network_info(request: HttpRequest) -> JsonResponse:
     })
 
 
+@login_required
 def home(request: HttpRequest) -> HttpResponse:
     """Home page with live map and activity log."""
     ips, _ = NetworkState.check_and_update_ips()

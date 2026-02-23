@@ -4,7 +4,12 @@ Database models for OwnTracks location tracking.
 This module defines the data models for storing device information
 and location data from OwnTracks clients.
 """
+from typing import Any
+
+from django.contrib.auth.models import User
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.utils import timezone
 
 
@@ -205,3 +210,44 @@ class OwnTracksMessage(models.Model):
         """Return string representation of the message."""
         device_str = self.device.device_id if self.device else 'Unknown'
         return f"{device_str} - {self.message_type} at {self.received_at}"
+
+
+class UserProfile(models.Model):
+    """
+    Extended profile for users.
+
+    Stores per-user settings beyond what the built-in User model provides.
+    Automatically created when a new User is created via the post_save signal.
+    """
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='profile',
+        help_text="The user this profile belongs to"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this profile was created"
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text="When this profile was last updated"
+    )
+
+    class Meta:
+        verbose_name = 'User Profile'
+        verbose_name_plural = 'User Profiles'
+
+    def __str__(self) -> str:
+        """Return string representation of the profile."""
+        return f"Profile for {self.user.username}"
+
+
+@receiver(post_save, sender=User)
+def create_user_profile(
+    sender: type[User], instance: User, created: bool, **kwargs: Any
+) -> None:
+    """Auto-create a UserProfile whenever a new User is created."""
+    if created:
+        UserProfile.objects.create(user=instance)
