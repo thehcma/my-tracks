@@ -249,7 +249,7 @@ LOGGING = {
     'formatters': {
         'verbose': {
             '()': 'config.settings.LocalTimeFormatter',
-            'format': '%(asctime)s.%(msecs)03d %(levelname)-7s %(module)s %(message)s',
+            'format': '%(asctime)s.%(msecs)03d | %(levelname)-8s | %(module)-12s | %(message)s',
             'datefmt': '%Y%m%d-%H:%M:%S',
         },
     },

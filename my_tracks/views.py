@@ -73,7 +73,7 @@ class LocationViewSet(viewsets.ModelViewSet):
         else:
             client_ip = request.META.get('REMOTE_ADDR')
 
-        logger.info("Incoming location request from: %s", client_ip)
+        logger.info("[HTTP] Incoming location request from: %s", client_ip)
         logger.debug("Request data: %s, Content-Type: %s", request.data, request.content_type)
 
         # Check message type
@@ -124,7 +124,7 @@ class LocationViewSet(viewsets.ModelViewSet):
             device_id = extract_device_id(field_name_to_value)
             if device_id:
                 field_name_to_value['device_id'] = device_id
-                logger.info("Extracted device_id '%s' from request data", device_id)
+                logger.info("[HTTP] Extracted device_id '%s' from request data", device_id)
 
         serializer = self.get_serializer(data=field_name_to_value, context={'client_ip': client_ip})
         serializer.is_valid(raise_exception=True)
@@ -136,7 +136,9 @@ class LocationViewSet(viewsets.ModelViewSet):
         if channel_layer:
             try:
                 logger.info(
-                    f"📡 Broadcasting location to WebSocket (id={location_data.get('id')}, device={location_data.get('device_id_display')})"
+                    "[HTTP] 📡 Broadcasting location to WebSocket (id=%s, device=%s)",
+                    location_data.get('id'),
+                    location_data.get('device_id_display'),
                 )
                 async_to_sync(channel_layer.group_send)(
                     "locations",
@@ -146,7 +148,8 @@ class LocationViewSet(viewsets.ModelViewSet):
                     }
                 )
                 logger.info(
-                    f"✅ WebSocket broadcast completed for location {location_data.get('id')}"
+                    "[HTTP] ✅ WebSocket broadcast completed for location %s",
+                    location_data.get('id'),
                 )
             except Exception as e:
                 logger.error(
