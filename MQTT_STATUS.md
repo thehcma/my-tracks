@@ -1,6 +1,6 @@
 # MQTT Implementation Status
 
-**Last Updated**: February 20, 2026
+**Last Updated**: February 23, 2026
 
 ## Overview
 
@@ -94,23 +94,37 @@ Implementing embedded MQTT broker for OwnTracks bidirectional communication.
 
 User authentication, per-user configuration, and TLS certificate management.
 
-### Step 1: User Authentication & Account Management API ← NEXT
-- Enforce authentication on all API endpoints (reject unauthenticated requests)
-- Web UI login/logout:
+### Step 1: User Authentication & Account Management API
+- ~~Enforce authentication on all API endpoints (reject unauthenticated requests)~~ ✅ (PR #193)
+- ~~Web UI login/logout~~ ✅ (PR #193):
   - Login page using Django's `LoginView` (session-based auth)
-  - Logout via Django's `LogoutView`
+  - Logout via Django's `LogoutView` (POST-based, CSRF-protected)
   - All web UI views require login (redirect unauthenticated users to login page)
-- REST endpoints for account self-service:
+  - Username display and logout button in header ✅ (PR #195)
+- ~~REST endpoints for account self-service~~ ✅ (PR #193):
   - `GET /api/account/` — retrieve current user profile
   - `PATCH /api/account/` — update profile fields
   - `POST /api/account/change-password/` — change password
-- Admin endpoints for user lifecycle:
+- ~~Admin endpoints for user lifecycle~~ ✅ (PR #193):
   - `POST /api/admin/users/` — create user
   - `DELETE /api/admin/users/{id}/` — deactivate user
   - `GET /api/admin/users/` — list users
-- `UserProfile` model (extends Django User) for per-user settings
-- Auth strategy: session auth for web UI, API key/token auth for REST clients
-- Tests for authenticated/unauthenticated access, login/logout flows, permissions, CRUD
+- ~~`UserProfile` model (extends Django User) for per-user settings~~ ✅ (PR #193)
+- ~~Auth strategy: session auth for web UI, API key/token auth for REST clients~~ ✅ (PR #193)
+- ~~Skip MQTT broker during management commands, handle port-in-use gracefully~~ ✅ (PR #194)
+- ~~Tests for authenticated/unauthenticated access, login/logout flows, permissions, CRUD~~ ✅ (PR #193)
+
+### Step 1b: User Profile Page & Session Management ← NEXT
+- Web UI profile page (`/profile/`):
+  - Display and edit user's full name (first name, last name)
+  - Display and edit email address
+  - Change password form (current password + new password + confirm)
+  - Link to profile page from the user menu in the header
+- Session expiration:
+  - Sessions expire after 7 days of inactivity (`SESSION_COOKIE_AGE = 604800`)
+  - Force re-authentication after session expires (redirect to login)
+  - `SESSION_SAVE_EVERY_REQUEST = True` to reset expiry on each request (sliding window)
+- Tests for profile page rendering, form validation, session expiry behavior
 
 ### Step 2: Global CA Configuration (Admin-Owned)
 - `CertificateAuthority` model storing CA certificate + private key (encrypted at rest)
@@ -170,8 +184,8 @@ my_tracks/mqtt/
 
 ## Test Coverage
 
-- 314 Python tests + 79 TypeScript tests passing
-- 90.74% code coverage
+- 409 Python tests + 79 TypeScript tests passing
+- 92% code coverage
 - All pyright checks pass
 
 ## Technical Notes
@@ -183,7 +197,7 @@ my_tracks/mqtt/
 
 ## Next Steps
 
-Phase 6 (Account Management) is next. Step 1 (User Authentication & Account Management API) is the immediate priority.
+Phase 6 Step 1b (User Profile Page & Session Management) is the immediate priority. Step 1 core auth is complete (PRs #193–#195).
 
 ## Future Enhancements
 
