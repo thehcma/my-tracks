@@ -126,7 +126,7 @@ This document defines the four specialized agents for the OwnTracks Django backe
 
 ## Agent 1: Implementation Agent
 
-**Model**: `claude-opus-4.5` (see AGENT_MODELS.md)
+**Model**: `claude-opus-4.6` (see AGENT_MODELS.md)
 
 **Role**: Core developer focused on creating efficient, maintainable code.
 

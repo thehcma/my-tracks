@@ -6,7 +6,7 @@ This file acts as the single source of truth for which AI models are assigned to
 
 | Agent Role | Model ID | Provider | Notes |
 |------------|----------|----------|-------|
-| **Implementation Agent** | `claude-opus-4.5` | Anthropic | Primary coding agent |
+| **Implementation Agent** | `claude-opus-4.6` | Anthropic | Primary coding agent |
 | **Primary Critique Agent** | `claude-opus-4.5` | Anthropic | Initial code review |
 | **Secondary Critique Agent** | `gpt-5.1-codex-max` | OpenAI | Deep logic/security review |
 | **Testing Agent** | `claude-opus-4.5` | Anthropic | Test generation |
