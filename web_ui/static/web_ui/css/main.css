@@ -343,16 +343,84 @@ a:hover {
     white-space: nowrap;
 }
 
-.user-name-link {
+.user-name {
     color: var(--text-muted);
     font-size: 13px;
-    text-decoration: none;
-    transition: color 0.2s ease;
 }
 
-.user-name-link:hover {
-    color: var(--link-color);
+/* Hamburger navigation menu */
+.nav-hamburger {
+    position: relative;
+}
+
+.hamburger-btn {
+    background: var(--endpoint-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 50px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    transition: all 0.2s ease;
+    color: var(--text-main);
+}
+
+.hamburger-btn:hover {
+    background: var(--code-bg);
+}
+
+.hamburger-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: var(--endpoint-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    min-width: 180px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 2000;
+    overflow: hidden;
+}
+
+.hamburger-item {
+    display: block;
+    padding: 10px 16px;
+    color: var(--text-main);
     text-decoration: none;
+    font-size: 13px;
+    transition: background 0.15s ease;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.hamburger-item:hover {
+    background: var(--code-bg);
+    text-decoration: none;
+    color: var(--text-main);
+}
+
+.hamburger-logout {
+    color: #e74c3c;
+}
+
+.hamburger-logout:hover {
+    background: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+}
+
+.hamburger-divider {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 0;
+}
+
+.hamburger-logout-form {
+    margin: 0;
+    padding: 0;
 }
 
 .admin-badge {
@@ -364,14 +432,6 @@ a:hover {
     letter-spacing: 0.5px;
     padding: 2px 8px;
     border-radius: 10px;
-    text-decoration: none;
-    transition: background 0.2s ease;
-}
-
-.admin-badge:hover {
-    background: #b02a6e;
-    text-decoration: none;
-    color: white;
 }
 
 .logout-form {

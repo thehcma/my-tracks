@@ -62,6 +62,7 @@ class TestWebUIViews:
         assert_that(content, contains_string('action="/logout/"'))
         assert_that(content, contains_string('method="post"'))
         assert_that(content, contains_string('Logout'))
+        assert_that(content, contains_string('id="hamburger-btn"'))
 
     def test_home_redirects_unauthenticated(self) -> None:
         """Test that unauthenticated users are redirected to login."""
@@ -454,12 +455,11 @@ class TestAdminBadge:
         content = response.content.decode('utf-8')
         assert_that(content, not_(contains_string('class="admin-badge"')))
 
-    def test_header_shows_profile_link(self, logged_in_client: Client) -> None:
-        """Header should show username as a link to the profile page."""
+    def test_hamburger_has_profile_link(self, logged_in_client: Client) -> None:
+        """Hamburger menu should have a link to the profile page."""
         response = logged_in_client.get('/')
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('href="/profile/"'))
-        assert_that(content, contains_string('class="user-name-link"'))
 
 
 @pytest.mark.django_db
@@ -722,17 +722,33 @@ class TestAdminPanel:
         content = response.content.decode('utf-8')
         assert_that(content, contains_string("already exists"))
 
-    def test_admin_panel_header_link_visible_for_admin(self, admin_logged_in_client: Client) -> None:
-        """Admin badge in home header should link to admin panel."""
+    def test_hamburger_menu_shows_admin_panel_for_admin(self, admin_logged_in_client: Client) -> None:
+        """Hamburger menu should contain admin panel link for admin users."""
         response = admin_logged_in_client.get('/')
         content = response.content.decode('utf-8')
+        assert_that(content, contains_string('id="hamburger-dropdown"'))
+        assert_that(content, contains_string('Admin Panel'))
         assert_that(content, contains_string('href="/admin-panel/"'))
 
-    def test_admin_panel_header_link_hidden_for_regular_user(self, logged_in_client: Client) -> None:
-        """Admin panel link should not appear for regular users."""
+    def test_hamburger_menu_hides_admin_panel_for_regular_user(self, logged_in_client: Client) -> None:
+        """Hamburger menu should not contain admin panel link for regular users."""
         response = logged_in_client.get('/')
         content = response.content.decode('utf-8')
-        assert_that(content, not_(contains_string('href="/admin-panel/"')))
+        assert_that(content, contains_string('id="hamburger-dropdown"'))
+        assert_that(content, not_(contains_string('Admin Panel')))
+
+    def test_hamburger_menu_shows_profile_link(self, logged_in_client: Client) -> None:
+        """Hamburger menu should contain profile link for all users."""
+        response = logged_in_client.get('/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('hamburger-item'))
+        assert_that(content, contains_string('Profile'))
+
+    def test_hamburger_menu_shows_logout(self, logged_in_client: Client) -> None:
+        """Hamburger menu should contain logout option."""
+        response = logged_in_client.get('/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Logout'))
 
     def test_admin_panel_has_back_to_map_link(self, admin_logged_in_client: Client) -> None:
         """Admin panel should have a link back to the map."""
