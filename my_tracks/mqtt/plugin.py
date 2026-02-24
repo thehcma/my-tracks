@@ -57,8 +57,15 @@ def save_location_to_db(location_data: dict[str, Any]) -> dict[str, Any] | None:
         )
 
         # Mark device as online (receiving location = device is connected)
+        # Also store mqtt_user from topic for command routing
+        mqtt_user = location_data.get("mqtt_user", "")
+        updates: dict[str, object] = {}
         if not device.is_online:
-            Device.objects.filter(pk=device.pk).update(is_online=True)
+            updates["is_online"] = True
+        if mqtt_user and device.mqtt_user != mqtt_user:
+            updates["mqtt_user"] = mqtt_user
+        if updates:
+            Device.objects.filter(pk=device.pk).update(**updates)
 
         # Create location from parsed data
         location = Location.objects.create(

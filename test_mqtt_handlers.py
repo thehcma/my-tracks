@@ -541,3 +541,53 @@ class TestOwnTracksMessageHandler:
 
         assert_that(len(received_data), equal_to(1))
         assert_that("client_ip" not in received_data[0], is_(True))
+
+    @pytest.mark.asyncio
+    async def test_mqtt_user_propagated_to_location_callback(self) -> None:
+        """Should include mqtt_user in location data from the topic."""
+        handler = OwnTracksMessageHandler()
+        received_data: list[dict[str, Any]] = []
+
+        def callback(data: dict) -> None:
+            received_data.append(data)
+
+        handler.on_location(callback)
+
+        payload = json.dumps({
+            "_type": "location",
+            "lat": 51.5,
+            "lon": -0.1,
+            "tst": 1704067200,
+        }).encode()
+
+        await handler.handle_message(
+            "owntracks/alice/phone", payload
+        )
+
+        assert_that(len(received_data), equal_to(1))
+        assert_that(received_data[0], has_entries(mqtt_user="alice"))
+
+    @pytest.mark.asyncio
+    async def test_mqtt_user_empty_when_topic_has_no_user(self) -> None:
+        """Should not add mqtt_user when topic has no user part."""
+        handler = OwnTracksMessageHandler()
+        received_data: list[dict[str, Any]] = []
+
+        def callback(data: dict) -> None:
+            received_data.append(data)
+
+        handler.on_location(callback)
+
+        payload = json.dumps({
+            "_type": "location",
+            "lat": 51.5,
+            "lon": -0.1,
+            "tst": 1704067200,
+        }).encode()
+
+        # This topic will be ignored because it doesn't match owntracks/{user}/{device}
+        await handler.handle_message(
+            "other/topic", payload
+        )
+
+        assert_that(len(received_data), equal_to(0))

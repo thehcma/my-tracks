@@ -127,6 +127,16 @@ def _run_mqtt_broker(mqtt_port: int) -> None:
         _state.loop.close()
 
 
+def get_mqtt_broker() -> "MQTTBroker | None":
+    """Return the running MQTTBroker instance, or None if not started."""
+    return _state.broker
+
+
+def get_mqtt_event_loop() -> "asyncio.AbstractEventLoop | None":
+    """Return the event loop used by the MQTT broker thread."""
+    return _state.loop
+
+
 _ASGI_SERVER_BINARIES = {'daphne', 'uvicorn'}
 
 

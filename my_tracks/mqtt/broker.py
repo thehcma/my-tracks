@@ -155,6 +155,11 @@ class MQTTBroker:
         """Get the broker configuration."""
         return self._config
 
+    @property
+    def amqtt_broker(self) -> Broker | None:
+        """Return the underlying amqtt Broker instance for internal publishing."""
+        return self._broker
+
     def _discover_port(self, listener_name: str) -> int | None:
         """Discover the actual port a listener is bound to.
 
