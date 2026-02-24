@@ -1,6 +1,6 @@
 # My Tracks — Implementation Plan
 
-**Last Updated**: February 23, 2026
+**Last Updated**: February 24, 2026
 
 ## Overview
 
@@ -126,31 +126,58 @@ Evolution plan for My Tracks, a Django-based backend for the OwnTracks location 
 
 ## Upcoming Work
 
-### Phase 6, Step 2: Global CA Configuration (Admin-Owned)
-- `CertificateAuthority` model storing CA certificate + private key (encrypted at rest)
-- Admin-only REST endpoints:
-  - `POST /api/admin/ca/` — generate or upload a CA certificate
-  - `GET /api/admin/ca/` — retrieve CA certificate (public part only)
-  - `DELETE /api/admin/ca/` — revoke/rotate CA
-- CA key stored encrypted using Django's `SECRET_KEY` or a dedicated encryption key
-- Only one active CA at a time (singleton pattern with history)
-- CA certificate downloadable for device trust-store provisioning
-- Tests for admin-only access, key generation, rotation
+### Phase 6, Step 2: Admin Dashboard ← NEXT
+Admin-only web UI page (`/admin-panel/`) for managing users and system settings.
 
-### Phase 6, Step 3: Per-User Certificate Configuration
-- `UserCertificate` model (FK → User, FK → CA) storing:
-  - Client certificate (PEM)
-  - Private key (encrypted at rest)
-  - Serial number, expiry, revocation status
-- REST endpoints:
-  - `POST /api/account/certificate/` — generate a new client certificate (signed by active CA)
-  - `GET /api/account/certificate/` — download current certificate + key bundle
-  - `DELETE /api/account/certificate/` — revoke certificate
-  - `GET /api/admin/certificates/` — admin view of all issued certificates
-- Certificate generation using `cryptography` library (X.509, RSA/EC keys)
-- MQTT broker updated to accept TLS client-certificate authentication as alternative to username/password
-- OwnTracks device configuration includes cert download/install instructions
-- Tests for cert generation, signing chain validation, revocation, MQTT TLS auth
+- **2a: Admin Page & User Management**
+  - Admin-only route (`/admin-panel/`), guarded by `is_staff` check
+  - Link in header (visible only to admin users)
+  - User list: table of all users showing username, email, role, status, last login
+  - Create user form: username, email, password, admin toggle (`is_staff`)
+  - Deactivate/reactivate users (soft delete via `is_active` flag)
+  - Uses existing `AdminUserViewSet` API as backend
+  - Consistent styling with login and profile pages
+  - Tests for admin access guard, user CRUD from UI, non-admin rejection
+
+- **2b: CA Certificate Management (Admin Panel)**
+  - `CertificateAuthority` model storing CA certificate + private key (encrypted at rest)
+  - CA generation UI in admin panel: generate new CA with configurable validity period
+  - CA key stored encrypted using Django's `SECRET_KEY` or a dedicated encryption key
+  - Only one active CA at a time (singleton pattern with history)
+  - Display CA status: subject, expiry, fingerprint, number of issued certs
+  - CA certificate downloadable for device trust-store provisioning
+  - Admin REST endpoints:
+    - `POST /api/admin/ca/` — generate or upload a CA certificate
+    - `GET /api/admin/ca/` — retrieve CA certificate (public part only)
+    - `DELETE /api/admin/ca/` — revoke/rotate CA
+  - Tests for admin-only access, key generation, rotation, encryption at rest
+
+### Phase 6, Step 3: Per-User Certificate Allocation
+Issue client certificates signed by the CA, allocated per user from the admin panel.
+
+- **3a: Certificate Model & Issuance**
+  - `UserCertificate` model (FK → User, FK → CA) storing:
+    - Client certificate (PEM)
+    - Private key (encrypted at rest)
+    - Serial number, expiry date, revocation status
+  - Certificate generation using `cryptography` library (X.509, RSA/EC keys)
+  - Admin panel UI: issue certificate for a user, view all issued certs, revoke certs
+  - Admin REST endpoints:
+    - `POST /api/admin/certificates/` — issue certificate for a user
+    - `GET /api/admin/certificates/` — list all issued certificates
+    - `DELETE /api/admin/certificates/{id}/` — revoke a certificate
+  - Tests for cert generation, signing chain validation, revocation
+
+- **3b: User Certificate Access & OwnTracks Configuration**
+  - Profile page (`/profile/`) shows allocated certificate:
+    - Certificate status (active, expiry date, fingerprint)
+    - Download certificate + key bundle (PEM or PKCS#12)
+    - OwnTracks connection settings (pre-filled MQTT/HTTP config with TLS)
+  - User REST endpoints:
+    - `GET /api/account/certificate/` — download current certificate + key bundle
+  - MQTT broker updated to accept TLS client-certificate authentication
+  - OwnTracks device configuration instructions for certificate-based auth
+  - Tests for user cert access, download, MQTT TLS auth
 
 ### Phase 7: Advanced Integration
 1. **Transition events** — Handle region enter/exit events, store transition history
