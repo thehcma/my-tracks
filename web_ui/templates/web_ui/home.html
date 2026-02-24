@@ -16,6 +16,18 @@
             <div class="map-section">
                 <div class="map-header">
                     <div class="map-controls">
+                        <div class="nav-hamburger" id="nav-hamburger">
+                            <button class="hamburger-btn" id="hamburger-btn" title="Menu" aria-label="Open navigation menu">☰</button>
+                            <div class="hamburger-dropdown hidden" id="hamburger-dropdown">
+                                <a href="{% url 'web_ui:profile' %}" class="hamburger-item">👤 Profile</a>
+                                {% if user.is_staff %}<a href="{% url 'web_ui:admin_panel' %}" class="hamburger-item">⚙️ Admin Panel</a>{% endif %}
+                                <hr class="hamburger-divider">
+                                <form method="post" action="{% url 'web_ui:logout' %}" class="hamburger-logout-form">
+                                    {% csrf_token %}
+                                    <button type="submit" class="hamburger-item hamburger-logout">🚪 Logout</button>
+                                </form>
+                            </div>
+                        </div>
                         <div class="mode-toggle" title="Switch between live updates and historic trail view">
                             <button id="live-mode-btn" class="active">📡 Live</button>
                             <button id="historic-mode-btn">📅 Historic</button>
@@ -54,12 +66,8 @@
                         <button class="header-toggle" id="sidebar-toggle" title="Toggle documentation sidebar" aria-label="Toggle sidebar">◀</button>
                         <button class="header-toggle" id="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle theme">🌙</button>
                         <div class="user-menu">
-                            {% if user.is_staff %}<a href="{% url 'web_ui:admin_panel' %}" class="admin-badge" title="Open admin panel">admin</a>{% endif %}
-                            <a href="{% url 'web_ui:profile' %}" class="user-name-link" title="Logged in as {{ user.username }} — click to edit profile">{{ user.username }}</a>
-                            <form method="post" action="{% url 'web_ui:logout' %}" class="logout-form">
-                                {% csrf_token %}
-                                <button type="submit" class="logout-button" title="Sign out">Logout</button>
-                            </form>
+                            {% if user.is_staff %}<span class="admin-badge" title="Administrator">admin</span>{% endif %}
+                            <span class="user-name" title="Logged in as {{ user.username }}">{{ user.username }}</span>
                         </div>
                     </div>
                     <h2 id="map-title">🗺️ Live Map</h2>
@@ -237,6 +245,22 @@
             localIp: "{{ local_ip }}",
             collapsePrecision: {{ collapse_precision }}
         };
+
+        // Hamburger menu toggle
+        const hamburgerBtn = document.getElementById('hamburger-btn');
+        const hamburgerDropdown = document.getElementById('hamburger-dropdown');
+        if (hamburgerBtn && hamburgerDropdown) {
+            hamburgerBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hamburgerDropdown.classList.toggle('hidden');
+            });
+            document.addEventListener('click', () => {
+                hamburgerDropdown.classList.add('hidden');
+            });
+            hamburgerDropdown.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        }
     </script>
     <script src="{% static 'web_ui/js/main.js' %}"></script>
 </body>
