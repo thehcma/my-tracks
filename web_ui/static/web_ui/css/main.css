@@ -264,6 +264,28 @@ a:hover {
     transform: scale(1.05);
 }
 
+.request-location-button {
+    background: #198754;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.request-location-button:hover {
+    background: #157347;
+    transform: scale(1.05);
+}
+
+.request-location-button:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    transform: none;
+}
+
 .reset-button {
     background: #dc3545;
     color: white;

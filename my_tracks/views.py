@@ -20,6 +20,7 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from .apps import get_mqtt_broker, get_mqtt_event_loop
 from .auth import CommandApiKeyAuthentication, get_command_api_key
 from .models import Device, Location, OwnTracksMessage, UserProfile
 from .mqtt.commands import Command, CommandPublisher
@@ -359,10 +360,11 @@ class CommandViewSet(viewsets.ViewSet):
     # Require authentication only when COMMAND_API_KEY is configured
     permission_classes = [IsAuthenticated if get_command_api_key() else AllowAny]
 
-    def _get_publisher(self) -> Any:
-        """Get the command publisher from the global broker instance."""
-        # For now, return a publisher without a client
-        # In production, this would be connected to the running broker
+    def _get_publisher(self) -> CommandPublisher:
+        """Get the command publisher connected to the running MQTT broker."""
+        broker = get_mqtt_broker()
+        if broker is not None and broker.is_running:
+            return CommandPublisher(mqtt_client=broker.amqtt_broker)
         return CommandPublisher()
 
     @action(detail=False, methods=['post'], url_path='report-location')
@@ -380,12 +382,13 @@ class CommandViewSet(viewsets.ViewSet):
             400: Missing device_id or invalid format
             503: MQTT broker not available
         """
-        device_id = request.data.get('device_id')
-        if not device_id:
+        raw_device_id = request.data.get('device_id')
+        if not raw_device_id:
             return Response(
                 {"error": "device_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        device_id = str(raw_device_id)
 
         publisher = self._get_publisher()
 
@@ -434,14 +437,15 @@ class CommandViewSet(viewsets.ViewSet):
             400: Missing required fields or invalid format
             503: MQTT broker not available
         """
-        device_id = request.data.get('device_id')
+        raw_device_id = request.data.get('device_id')
         waypoints = request.data.get('waypoints')
 
-        if not device_id:
+        if not raw_device_id:
             return Response(
                 {"error": "device_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        device_id = str(raw_device_id)
 
         if not waypoints or not isinstance(waypoints, list):
             return Response(
@@ -493,12 +497,13 @@ class CommandViewSet(viewsets.ViewSet):
             400: Missing device_id or invalid format
             503: MQTT broker not available
         """
-        device_id = request.data.get('device_id')
-        if not device_id:
+        raw_device_id = request.data.get('device_id')
+        if not raw_device_id:
             return Response(
                 {"error": "device_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        device_id = str(raw_device_id)
 
         publisher = self._get_publisher()
 

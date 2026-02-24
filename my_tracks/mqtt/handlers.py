@@ -302,9 +302,11 @@ class OwnTracksMessageHandler:
         msg_type = message.get("_type")
         logger.debug("Received OwnTracks %s message from %s", msg_type, topic)
 
+        mqtt_user = topic_info.get("user", "")
+
         # Route to appropriate handler
         if msg_type == "location":
-            await self._handle_location(message, topic_info, client_ip=client_ip)
+            await self._handle_location(message, topic_info, client_ip=client_ip, mqtt_user=mqtt_user)
         elif msg_type == "lwt":
             await self._handle_lwt(message, topic_info)
         elif msg_type == "transition":
@@ -318,6 +320,7 @@ class OwnTracksMessageHandler:
         topic_info: dict[str, str],
         *,
         client_ip: str | None = None,
+        mqtt_user: str = "",
     ) -> None:
         """Handle a location message."""
         location_data = extract_location_data(message, topic_info)
@@ -326,6 +329,8 @@ class OwnTracksMessageHandler:
 
         if client_ip:
             location_data["client_ip"] = client_ip
+        if mqtt_user:
+            location_data["mqtt_user"] = mqtt_user
 
         for callback in self._location_callbacks:
             try:

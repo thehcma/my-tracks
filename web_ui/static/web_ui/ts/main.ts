@@ -262,7 +262,8 @@ function formatTime(timestamp: number, includeDate = false): string {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const seconds = String(date.getSeconds()).padStart(2, '0');
-    const timeStr = `${hours}:${minutes}:${seconds}`;
+    const tz = date.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop() ?? '';
+    const timeStr = `${hours}:${minutes}:${seconds} ${tz}`;
 
     // Include date if requested or if not today
     if (includeDate || !isToday) {
@@ -1936,6 +1937,65 @@ async function loadLast30Minutes(): Promise<void> {
 
 // ============================================================================
 // Live Activity
+/**
+ * Request all online MQTT devices to report their current location.
+ * Fetches the device list, then sends a reportLocation command to each
+ * device that has a known MQTT topic.
+ */
+async function requestDeviceLocations(): Promise<void> {
+    const btn = document.getElementById('request-location-button') as HTMLButtonElement | null;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Polling...';
+    }
+
+    try {
+        const devicesResp = await fetch('/api/devices/');
+        if (!devicesResp.ok) {
+            console.warn('Failed to fetch devices:', devicesResp.status);
+            return;
+        }
+
+        interface DeviceInfo {
+            device_id: string;
+            mqtt_topic_id: string;
+            is_online: boolean;
+        }
+        const devices: DeviceInfo[] = await devicesResp.json();
+
+        const mqttDevices = devices.filter(d => d.mqtt_topic_id && d.is_online);
+        if (mqttDevices.length === 0) {
+            console.log('No online MQTT devices to poll');
+            return;
+        }
+
+        const csrfToken = document.querySelector<HTMLInputElement>('[name=csrfmiddlewaretoken]')?.value ?? '';
+
+        const results = await Promise.allSettled(
+            mqttDevices.map(d =>
+                fetch('/api/commands/report-location/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}),
+                    },
+                    body: JSON.stringify({ device_id: d.mqtt_topic_id }),
+                })
+            ),
+        );
+
+        const succeeded = results.filter(r => r.status === 'fulfilled' && (r as PromiseFulfilledResult<Response>).value.ok).length;
+        console.log(`Polled ${succeeded}/${mqttDevices.length} MQTT devices`);
+    } catch (err) {
+        console.error('requestDeviceLocations error:', err);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '📍 Poll Devices';
+        }
+    }
+}
+
 // ============================================================================
 
 /**
@@ -2111,6 +2171,7 @@ function switchToLiveMode(): void {
 
     // Show live-mode-only buttons
     document.getElementById('load-history-button')?.classList.remove('hidden');
+    document.getElementById('request-location-button')?.classList.remove('hidden');
     document.getElementById('reset-button')?.classList.remove('hidden');
 
     // Hide device legend in live mode
@@ -2173,6 +2234,7 @@ function switchToHistoricMode(): void {
 
     // Hide live-mode-only buttons (they're not relevant in historic mode)
     document.getElementById('load-history-button')?.classList.add('hidden');
+    document.getElementById('request-location-button')?.classList.add('hidden');
     document.getElementById('reset-button')?.classList.add('hidden');
 
     // Set date picker to current historic date (or today)
@@ -2661,6 +2723,12 @@ function initEventListeners(): void {
     const loadHistoryButton = document.getElementById('load-history-button');
     if (loadHistoryButton) {
         loadHistoryButton.addEventListener('click', loadLast30Minutes);
+    }
+
+    // Request location button
+    const requestLocationButton = document.getElementById('request-location-button');
+    if (requestLocationButton) {
+        requestLocationButton.addEventListener('click', requestDeviceLocations);
     }
 
     // Device selector

@@ -679,6 +679,39 @@ class TestDeviceAPI:
         assert_that(response.data['device_id'], equal_to('TEST01'))
         assert_that(response.data['name'], equal_to('Test Device'))
 
+    def test_get_device_detail_includes_mqtt_topic_id(
+        self,
+        auth_api_client: APIClient,
+    ) -> None:
+        """Test that device detail returns mqtt_topic_id from mqtt_user + device_id."""
+        device = Device.objects.create(
+            device_id="myphone",
+            name="My Phone",
+            mqtt_user="alice",
+        )
+
+        response = auth_api_client.get(f'/api/devices/{device.device_id}/')
+
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response.data["mqtt_topic_id"], equal_to("alice/myphone"))
+        assert_that(response.data["mqtt_user"], equal_to("alice"))
+
+    def test_get_device_detail_mqtt_topic_id_empty_when_no_user(
+        self,
+        auth_api_client: APIClient,
+    ) -> None:
+        """Test that mqtt_topic_id is empty when mqtt_user is not set."""
+        device = Device.objects.create(
+            device_id="httpdevice",
+            name="HTTP Device",
+        )
+
+        response = auth_api_client.get(f'/api/devices/{device.device_id}/')
+
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response.data["mqtt_topic_id"], equal_to(""))
+        assert_that(response.data["mqtt_user"], equal_to(""))
+
     def test_get_device_locations(
         self,
         auth_api_client: APIClient,

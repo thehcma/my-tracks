@@ -156,6 +156,59 @@ class TestSaveLocationToDb(TestCase):
         location = Location.objects.get(id=result["id"])
         assert_that(location.ip_address, is_(none()))
 
+    def test_save_location_stores_mqtt_user(self) -> None:
+        """Should store mqtt_user on the Device when provided."""
+        location_data = {
+            "device": "myphone",
+            "latitude": 51.5074,
+            "longitude": -0.1278,
+            "timestamp": datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+            "mqtt_user": "alice",
+        }
+
+        result = save_location_to_db(location_data)
+        assert_that(result, is_not(none()))
+
+        device = Device.objects.get(device_id="myphone")
+        assert_that(device.mqtt_user, equal_to("alice"))
+
+    def test_save_location_without_mqtt_user(self) -> None:
+        """Should leave mqtt_user empty when not provided."""
+        location_data = {
+            "device": "myphone2",
+            "latitude": 51.5074,
+            "longitude": -0.1278,
+            "timestamp": datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+        }
+
+        result = save_location_to_db(location_data)
+        assert_that(result, is_not(none()))
+
+        device = Device.objects.get(device_id="myphone2")
+        assert_that(device.mqtt_user, equal_to(""))
+
+    def test_save_location_updates_mqtt_user_on_change(self) -> None:
+        """Should update mqtt_user if it changes."""
+        Device.objects.create(
+            device_id="evolving",
+            name="Evolving Device",
+            mqtt_user="old_user",
+        )
+
+        location_data = {
+            "device": "evolving",
+            "latitude": 40.0,
+            "longitude": -74.0,
+            "timestamp": datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC),
+            "mqtt_user": "new_user",
+        }
+
+        result = save_location_to_db(location_data)
+        assert_that(result, is_not(none()))
+
+        device = Device.objects.get(device_id="evolving")
+        assert_that(device.mqtt_user, equal_to("new_user"))
+
 
 class TestSaveLwtToDb(TestCase):
     """Tests for save_lwt_to_db function."""

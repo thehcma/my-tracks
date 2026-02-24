@@ -55,10 +55,10 @@ describe('formatTime', () => {
     // Use a fixed timestamp to avoid timezone issues in tests
     const timestamp = 1704067200; // 2024-01-01 00:00:00 UTC
 
-    it('formats time with hours, minutes, and seconds', () => {
+    it('formats time with hours, minutes, seconds, and timezone', () => {
         const result = formatTime(timestamp, true);
-        // The exact format depends on local timezone, but should contain time parts
-        expect(result).toMatch(/\d{2}:\d{2}:\d{2}/);
+        // Should contain HH:MM:SS followed by a timezone abbreviation
+        expect(result).toMatch(/\d{2}:\d{2}:\d{2} [A-Z]{2,5}/);
     });
 
     it('includes date when includeDate is true', () => {
@@ -76,13 +76,12 @@ describe('formatTime', () => {
         expect(result).toMatch(/Jan 15/);
     });
 
-    it('shows only time for today timestamps when includeDate is false', () => {
+    it('shows time with timezone for today timestamps when includeDate is false', () => {
         // Create a timestamp for right now
         const now = Math.floor(Date.now() / 1000);
         const result = formatTime(now, false);
-        // When it's today and includeDate is false, should just be time
-        // Format: HH:MM:SS
-        expect(result).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+        // Format: HH:MM:SS TZ (e.g., "14:22:17 EST")
+        expect(result).toMatch(/^\d{2}:\d{2}:\d{2} [A-Z]{2,5}$/);
     });
 });
 

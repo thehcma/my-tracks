@@ -21,15 +21,25 @@ class DeviceSerializer(serializers.ModelSerializer):
     """Serializer for Device model."""
 
     location_count = serializers.SerializerMethodField()
+    mqtt_topic_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Device
-        fields = ['id', 'device_id', 'name', 'created_at', 'last_seen', 'is_online', 'location_count']
-        read_only_fields = ['id', 'created_at', 'last_seen', 'is_online']
+        fields = [
+            'id', 'device_id', 'name', 'created_at', 'last_seen',
+            'is_online', 'location_count', 'mqtt_user', 'mqtt_topic_id',
+        ]
+        read_only_fields = ['id', 'created_at', 'last_seen', 'is_online', 'mqtt_user']
 
     def get_location_count(self, obj: Device) -> int:
         """Get the total number of locations for this device."""
         return obj.locations.count()
+
+    def get_mqtt_topic_id(self, obj: Device) -> str:
+        """Return ``{mqtt_user}/{device_id}`` for use in command API calls."""
+        if obj.mqtt_user:
+            return f"{obj.mqtt_user}/{obj.device_id}"
+        return ""
 
 
 class LocationSerializer(serializers.ModelSerializer):

@@ -44,6 +44,12 @@ class Device(models.Model):
         default=False,  # type: ignore[reportArgumentType]  # django-stubs issue
         help_text="Whether the device is currently connected via MQTT"
     )
+    mqtt_user = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text="OwnTracks MQTT user (from topic owntracks/{user}/{device})"
+    )
 
     class Meta:
         ordering = ['-last_seen']
