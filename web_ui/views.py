@@ -5,7 +5,10 @@ import socket
 
 import netifaces
 from django.conf import settings
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 
@@ -166,3 +169,43 @@ def home(request: HttpRequest) -> HttpResponse:
     response['Pragma'] = 'no-cache'
     response['Expires'] = '0'
     return response
+
+
+@login_required
+def profile(request: HttpRequest) -> HttpResponse:
+    """User profile page for editing name, email, and password."""
+    context: dict[str, str] = {}
+
+    if request.method == 'POST':
+        form_type = request.POST.get('form_type')
+        user = request.user
+
+        if form_type == 'profile':
+            user.first_name = request.POST.get('first_name', '')
+            user.last_name = request.POST.get('last_name', '')
+            user.email = request.POST.get('email', '')
+            user.save()
+            context['profile_success'] = 'Profile updated successfully.'
+
+        elif form_type == 'password':
+            current_password = request.POST.get('current_password', '')
+            new_password = request.POST.get('new_password', '')
+            confirm_password = request.POST.get('confirm_password', '')
+
+            if not user.check_password(current_password):
+                context['password_error'] = 'Current password is incorrect.'
+            elif new_password != confirm_password:
+                context['password_error'] = 'New passwords do not match.'
+            elif len(new_password) < 8:
+                context['password_error'] = 'Password must be at least 8 characters.'
+            else:
+                try:
+                    validate_password(new_password, user=user)
+                    user.set_password(new_password)
+                    user.save()
+                    update_session_auth_hash(request, user)
+                    context['password_success'] = 'Password changed successfully.'
+                except ValidationError as e:
+                    context['password_error'] = ' '.join(e.messages)
+
+    return render(request, 'web_ui/profile.html', context)

@@ -6,10 +6,11 @@ from unittest.mock import patch
 
 import netifaces
 import pytest
+from django.contrib.auth.models import User
 from django.test import Client
 from hamcrest import (assert_that, contains_string, equal_to, greater_than,
                       has_item, has_key, has_length, instance_of, is_, is_not,
-                      not_none)
+                      not_, not_none)
 from rest_framework import status
 
 
@@ -434,3 +435,176 @@ class TestThemeHTMLIntegration:
         response = logged_in_client.get('/')
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('/static/web_ui/js/main.'))
+
+
+@pytest.mark.django_db
+class TestAdminBadge:
+    """Test admin badge display in the header."""
+
+    def test_admin_user_sees_admin_badge(self, admin_logged_in_client: Client) -> None:
+        """Admin users should see the admin badge in the header."""
+        response = admin_logged_in_client.get('/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('class="admin-badge"'))
+        assert_that(content, contains_string('admin'))
+
+    def test_regular_user_does_not_see_admin_badge(self, logged_in_client: Client) -> None:
+        """Regular users should not see the admin badge."""
+        response = logged_in_client.get('/')
+        content = response.content.decode('utf-8')
+        assert_that(content, not_(contains_string('class="admin-badge"')))
+
+    def test_header_shows_profile_link(self, logged_in_client: Client) -> None:
+        """Header should show username as a link to the profile page."""
+        response = logged_in_client.get('/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('href="/profile/"'))
+        assert_that(content, contains_string('class="user-name-link"'))
+
+
+@pytest.mark.django_db
+class TestProfilePage:
+    """Test the user profile page."""
+
+    def test_profile_page_renders(self, logged_in_client: Client) -> None:
+        """Profile page should render for authenticated users."""
+        response = logged_in_client.get('/profile/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('testuser'))
+
+    def test_profile_page_redirects_unauthenticated(self) -> None:
+        """Unauthenticated users should be redirected to login."""
+        client = Client()
+        response = client.get('/profile/')
+        assert_that(response.status_code, equal_to(status.HTTP_302_FOUND))
+        assert_that(response.url, contains_string('/login/'))
+
+    def test_profile_shows_admin_badge_for_admin(self, admin_logged_in_client: Client) -> None:
+        """Profile page shows Administrator badge for admin users."""
+        response = admin_logged_in_client.get('/profile/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Administrator'))
+        assert_that(content, contains_string('role-badge admin'))
+
+    def test_profile_shows_user_badge_for_regular_user(self, logged_in_client: Client) -> None:
+        """Profile page shows User badge for regular users."""
+        response = logged_in_client.get('/profile/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('role-badge user'))
+
+    def test_profile_update_name(self, logged_in_client: Client, user: User) -> None:
+        """Updating first and last name via the profile form."""
+        response = logged_in_client.post('/profile/', {
+            'form_type': 'profile',
+            'first_name': 'John',
+            'last_name': 'Doe',
+            'email': user.email,
+        })
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Profile updated successfully'))
+
+        user.refresh_from_db()
+        assert_that(user.first_name, equal_to('John'))
+        assert_that(user.last_name, equal_to('Doe'))
+
+    def test_profile_update_email(self, logged_in_client: Client, user: User) -> None:
+        """Updating email via the profile form."""
+        response = logged_in_client.post('/profile/', {
+            'form_type': 'profile',
+            'first_name': '',
+            'last_name': '',
+            'email': 'newemail@example.com',
+        })
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+
+        user.refresh_from_db()
+        assert_that(user.email, equal_to('newemail@example.com'))
+
+    def test_password_change_success(self, logged_in_client: Client, user: User) -> None:
+        """Changing password with correct current password."""
+        response = logged_in_client.post('/profile/', {
+            'form_type': 'password',
+            'current_password': 'testpass123',
+            'new_password': 'newSecureP@ss99',
+            'confirm_password': 'newSecureP@ss99',
+        })
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Password changed successfully'))
+
+        user.refresh_from_db()
+        assert_that(user.check_password('newSecureP@ss99'), is_(True))
+
+    def test_password_change_wrong_current_password(self, logged_in_client: Client) -> None:
+        """Changing password with wrong current password should fail."""
+        response = logged_in_client.post('/profile/', {
+            'form_type': 'password',
+            'current_password': 'wrongpassword',
+            'new_password': 'newSecureP@ss99',
+            'confirm_password': 'newSecureP@ss99',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Current password is incorrect'))
+
+    def test_password_change_mismatch(self, logged_in_client: Client) -> None:
+        """Changing password with mismatched new passwords should fail."""
+        response = logged_in_client.post('/profile/', {
+            'form_type': 'password',
+            'current_password': 'testpass123',
+            'new_password': 'newSecureP@ss99',
+            'confirm_password': 'differentP@ss99',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('New passwords do not match'))
+
+    def test_password_change_too_short(self, logged_in_client: Client) -> None:
+        """Changing password to something too short should fail."""
+        response = logged_in_client.post('/profile/', {
+            'form_type': 'password',
+            'current_password': 'testpass123',
+            'new_password': 'short',
+            'confirm_password': 'short',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('at least 8 characters'))
+
+    def test_password_change_keeps_session(self, logged_in_client: Client) -> None:
+        """Changing password should not log the user out."""
+        logged_in_client.post('/profile/', {
+            'form_type': 'password',
+            'current_password': 'testpass123',
+            'new_password': 'newSecureP@ss99',
+            'confirm_password': 'newSecureP@ss99',
+        })
+        response = logged_in_client.get('/profile/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+
+    def test_profile_has_back_to_map_link(self, logged_in_client: Client) -> None:
+        """Profile page should have a link back to the map."""
+        response = logged_in_client.get('/profile/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Back to Map'))
+        assert_that(content, contains_string('href="/"'))
+
+    def test_profile_shows_member_since(self, logged_in_client: Client) -> None:
+        """Profile page should show the member since date."""
+        response = logged_in_client.get('/profile/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Member since'))
+
+
+@pytest.mark.django_db
+class TestSessionConfiguration:
+    """Test session configuration settings."""
+
+    def test_session_cookie_age_is_7_days(self) -> None:
+        """Session cookie age should be 7 days (604800 seconds)."""
+        from django.conf import settings
+        assert_that(settings.SESSION_COOKIE_AGE, equal_to(604800))
+
+    def test_session_save_every_request(self) -> None:
+        """Session should be saved on every request for sliding window expiry."""
+        from django.conf import settings
+        assert_that(settings.SESSION_SAVE_EVERY_REQUEST, is_(True))

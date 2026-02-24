@@ -343,9 +343,27 @@ a:hover {
     white-space: nowrap;
 }
 
-.user-name {
+.user-name-link {
     color: var(--text-muted);
     font-size: 13px;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.user-name-link:hover {
+    color: var(--link-color);
+    text-decoration: none;
+}
+
+.admin-badge {
+    background: #d63384;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 10px;
 }
 
 .logout-form {
