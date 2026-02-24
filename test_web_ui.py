@@ -608,3 +608,135 @@ class TestSessionConfiguration:
         """Session should be saved on every request for sliding window expiry."""
         from django.conf import settings
         assert_that(settings.SESSION_SAVE_EVERY_REQUEST, is_(True))
+
+
+@pytest.mark.django_db
+class TestAdminPanel:
+    """Test the admin panel page."""
+
+    def test_admin_panel_renders_for_admin(self, admin_logged_in_client: Client) -> None:
+        """Admin panel should render for staff users."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Admin Panel'))
+        assert_that(content, contains_string('Create User'))
+
+    def test_admin_panel_rejected_for_regular_user(self, logged_in_client: Client) -> None:
+        """Regular users should be redirected away from admin panel."""
+        response = logged_in_client.get('/admin-panel/')
+        assert_that(response.status_code, equal_to(status.HTTP_302_FOUND))
+
+    def test_admin_panel_redirects_unauthenticated(self) -> None:
+        """Unauthenticated users should be redirected to login."""
+        client = Client()
+        response = client.get('/admin-panel/')
+        assert_that(response.status_code, equal_to(status.HTTP_302_FOUND))
+        assert_that(response.url, contains_string('/login/'))
+
+    def test_admin_panel_shows_user_list(
+        self, admin_logged_in_client: Client, user: User, admin_user: User
+    ) -> None:
+        """Admin panel should show all users in a table."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('testuser'))
+        assert_that(content, contains_string('admin'))
+        assert_that(content, contains_string('user-table'))
+
+    def test_admin_panel_create_user(self, admin_logged_in_client: Client) -> None:
+        """Creating a user through the admin panel form."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'create_user',
+            'username': 'newperson',
+            'email': 'new@test.com',
+            'password': 'secureP@ss99',
+            'first_name': 'Jane',
+            'last_name': 'Doe',
+        })
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string("created as user"))
+
+        created = User.objects.get(username='newperson')
+        assert_that(created.first_name, equal_to('Jane'))
+        assert_that(created.last_name, equal_to('Doe'))
+        assert_that(created.email, equal_to('new@test.com'))
+
+    def test_admin_panel_create_admin_user(self, admin_logged_in_client: Client) -> None:
+        """Creating an admin user through the admin panel form."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'create_user',
+            'username': 'newadmin',
+            'email': 'admin2@test.com',
+            'password': 'secureP@ss99',
+            'is_admin': 'on',
+        })
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string("created as administrator"))
+
+        new_admin = User.objects.get(username='newadmin')
+        assert_that(new_admin.is_staff, is_(True))
+        assert_that(new_admin.is_superuser, is_(True))
+
+    def test_admin_panel_create_user_missing_username(self, admin_logged_in_client: Client) -> None:
+        """Creating a user without username shows error."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'create_user',
+            'username': '',
+            'password': 'secureP@ss99',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Username is required'))
+
+    def test_admin_panel_create_user_missing_password(self, admin_logged_in_client: Client) -> None:
+        """Creating a user without password shows error."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'create_user',
+            'username': 'someone',
+            'password': '',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Password is required'))
+
+    def test_admin_panel_create_user_short_password(self, admin_logged_in_client: Client) -> None:
+        """Creating a user with short password shows error."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'create_user',
+            'username': 'someone',
+            'password': 'short',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('at least 8 characters'))
+
+    def test_admin_panel_create_duplicate_user(
+        self, admin_logged_in_client: Client, user: User
+    ) -> None:
+        """Creating a user with existing username shows error."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'create_user',
+            'username': 'testuser',
+            'password': 'secureP@ss99',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string("already exists"))
+
+    def test_admin_panel_header_link_visible_for_admin(self, admin_logged_in_client: Client) -> None:
+        """Admin badge in home header should link to admin panel."""
+        response = admin_logged_in_client.get('/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('href="/admin-panel/"'))
+
+    def test_admin_panel_header_link_hidden_for_regular_user(self, logged_in_client: Client) -> None:
+        """Admin panel link should not appear for regular users."""
+        response = logged_in_client.get('/')
+        content = response.content.decode('utf-8')
+        assert_that(content, not_(contains_string('href="/admin-panel/"')))
+
+    def test_admin_panel_has_back_to_map_link(self, admin_logged_in_client: Client) -> None:
+        """Admin panel should have a link back to the map."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Back to Map'))
+        assert_that(content, contains_string('href="/"'))

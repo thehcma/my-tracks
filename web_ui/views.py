@@ -6,7 +6,8 @@ import socket
 import netifaces
 from django.conf import settings
 from django.contrib.auth import update_session_auth_hash
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -209,3 +210,56 @@ def profile(request: HttpRequest) -> HttpResponse:
                     context['password_error'] = ' '.join(e.messages)
 
     return render(request, 'web_ui/profile.html', context)
+
+
+def _is_staff(user: User) -> bool:  # type: ignore[override]
+    """Check if user is staff (for use with user_passes_test decorator)."""
+    return user.is_staff
+
+
+@login_required
+@user_passes_test(_is_staff, login_url='/')
+def admin_panel(request: HttpRequest) -> HttpResponse:
+    """Admin panel for user management."""
+    context: dict[str, object] = {}
+
+    if request.method == 'POST':
+        form_type = request.POST.get('form_type')
+
+        if form_type == 'create_user':
+            username = request.POST.get('username', '').strip()
+            email = request.POST.get('email', '').strip()
+            first_name = request.POST.get('first_name', '').strip()
+            last_name = request.POST.get('last_name', '').strip()
+            password = request.POST.get('password', '')
+            is_admin = request.POST.get('is_admin') == 'on'
+
+            if not username:
+                context['create_error'] = 'Username is required.'
+            elif not password:
+                context['create_error'] = 'Password is required.'
+            elif len(password) < 8:
+                context['create_error'] = 'Password must be at least 8 characters.'
+            elif User.objects.filter(username=username).exists():
+                context['create_error'] = f"User '{username}' already exists."
+            else:
+                try:
+                    user = User.objects.create_user(
+                        username=username,
+                        email=email,
+                        password=password,
+                        first_name=first_name,
+                        last_name=last_name,
+                    )
+                    if is_admin:
+                        user.is_staff = True
+                        user.is_superuser = True
+                        user.save()
+                    role = "administrator" if is_admin else "user"
+                    context['create_success'] = f"User '{username}' created as {role}."
+                except Exception as e:
+                    context['create_error'] = str(e)
+
+    users = User.objects.all().order_by('username')
+    context['users'] = users
+    return render(request, 'web_ui/admin_panel.html', context)
