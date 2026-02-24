@@ -273,13 +273,20 @@ class OwnTracksMessageHandler:
         """Register a callback for transition messages."""
         self._transition_callbacks.append(callback)
 
-    async def handle_message(self, topic: str, payload: bytes) -> None:
+    async def handle_message(
+        self,
+        topic: str,
+        payload: bytes,
+        *,
+        client_ip: str | None = None,
+    ) -> None:
         """
         Handle an incoming MQTT message.
 
         Args:
             topic: MQTT topic
             payload: Message payload bytes
+            client_ip: IP address of the MQTT client (from broker session)
         """
         # Parse topic
         topic_info = parse_owntracks_topic(topic)
@@ -297,7 +304,7 @@ class OwnTracksMessageHandler:
 
         # Route to appropriate handler
         if msg_type == "location":
-            await self._handle_location(message, topic_info)
+            await self._handle_location(message, topic_info, client_ip=client_ip)
         elif msg_type == "lwt":
             await self._handle_lwt(message, topic_info)
         elif msg_type == "transition":
@@ -309,11 +316,16 @@ class OwnTracksMessageHandler:
         self,
         message: dict[str, Any],
         topic_info: dict[str, str],
+        *,
+        client_ip: str | None = None,
     ) -> None:
         """Handle a location message."""
         location_data = extract_location_data(message, topic_info)
         if not location_data:
             return
+
+        if client_ip:
+            location_data["client_ip"] = client_ip
 
         for callback in self._location_callbacks:
             try:

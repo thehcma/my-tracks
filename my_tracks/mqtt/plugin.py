@@ -72,6 +72,7 @@ def save_location_to_db(location_data: dict[str, Any]) -> dict[str, Any] | None:
             velocity=location_data.get("velocity"),
             battery_level=location_data.get("battery"),
             connection_type=location_data.get("connection", ""),
+            ip_address=location_data.get("client_ip"),
         )
 
         # Serialize for WebSocket broadcast
@@ -350,7 +351,13 @@ class OwnTracksPlugin(BasePlugin[BrokerContext]):
             len(message.data) if message.data else 0,
         )
 
+        # Look up client IP from broker session
+        client_ip: str | None = None
+        session = self.context.get_session(client_id)
+        if session is not None:
+            client_ip = session.remote_address
+
         # Process through OwnTracks handler
         # Convert bytearray to bytes if needed
         payload = bytes(message.data) if isinstance(message.data, bytearray) else message.data
-        await self._handler.handle_message(topic, payload)
+        await self._handler.handle_message(topic, payload, client_ip=client_ip)

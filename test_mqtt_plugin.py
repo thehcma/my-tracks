@@ -125,6 +125,37 @@ class TestSaveLocationToDb(TestCase):
         device = Device.objects.get(device_id="user/onlinedev")
         assert_that(device.is_online, equal_to(True))
 
+    def test_save_location_with_client_ip(self) -> None:
+        """Should store client_ip as ip_address when provided."""
+        location_data = {
+            "device": "phone",
+            "latitude": 51.5074,
+            "longitude": -0.1278,
+            "timestamp": datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+            "client_ip": "192.168.1.100",
+        }
+
+        result = save_location_to_db(location_data)
+        assert_that(result, is_not(none()))
+
+        location = Location.objects.get(id=result["id"])
+        assert_that(location.ip_address, equal_to("192.168.1.100"))
+
+    def test_save_location_without_client_ip(self) -> None:
+        """Should leave ip_address as None when client_ip not provided."""
+        location_data = {
+            "device": "phone",
+            "latitude": 51.5074,
+            "longitude": -0.1278,
+            "timestamp": datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+        }
+
+        result = save_location_to_db(location_data)
+        assert_that(result, is_not(none()))
+
+        location = Location.objects.get(id=result["id"])
+        assert_that(location.ip_address, is_(none()))
+
 
 class TestSaveLwtToDb(TestCase):
     """Tests for save_lwt_to_db function."""
@@ -244,6 +275,7 @@ def mock_broker_context() -> MagicMock:
     """Create a mock BrokerContext for testing."""
     context = MagicMock()
     context.config = {}
+    context.get_session.return_value = None
     return context
 
 
@@ -468,6 +500,47 @@ class TestOwnTracksPluginMessageHandling:
 
         # No location should be saved
         assert_that(Location.objects.count(), equal_to(initial_count))
+
+    @pytest.mark.asyncio
+    async def test_stores_client_ip_from_session(
+        self,
+        plugin: OwnTracksPlugin,
+        mock_message: MagicMock,
+        mock_broker_context: MagicMock,
+    ) -> None:
+        """Should look up client IP from broker session and store it."""
+        mock_session = MagicMock()
+        mock_session.remote_address = "10.0.0.42"
+        mock_broker_context.get_session.return_value = mock_session
+
+        with patch.object(plugin, "_broadcast_location", new_callable=AsyncMock):
+            await plugin.on_broker_message_received(
+                client_id="test-client",
+                message=mock_message,
+            )
+
+        mock_broker_context.get_session.assert_called_once_with("test-client")
+        location = Location.objects.latest("id")
+        assert_that(location.ip_address, equal_to("10.0.0.42"))
+
+    @pytest.mark.asyncio
+    async def test_handles_missing_session_gracefully(
+        self,
+        plugin: OwnTracksPlugin,
+        mock_message: MagicMock,
+        mock_broker_context: MagicMock,
+    ) -> None:
+        """Should handle missing session (ip_address stays None)."""
+        mock_broker_context.get_session.return_value = None
+
+        with patch.object(plugin, "_broadcast_location", new_callable=AsyncMock):
+            await plugin.on_broker_message_received(
+                client_id="test-client",
+                message=mock_message,
+            )
+
+        location = Location.objects.latest("id")
+        assert_that(location.ip_address, is_(none()))
 
 
 @pytest.mark.django_db
