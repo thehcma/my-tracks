@@ -2552,7 +2552,6 @@ function initResizeHandle(): void {
             newActivityHeight = totalHeight - minHeight;
         }
         if (newActivityHeight < minHeight) {
-            newActivityHeight = minHeight;
             newMapHeight = totalHeight - minHeight;
         }
 
