@@ -491,3 +491,53 @@ class TestOwnTracksMessageHandler:
 
         # Good callback should still be called
         assert_that(len(received_data), equal_to(1))
+
+    @pytest.mark.asyncio
+    async def test_client_ip_propagated_to_location_callback(self) -> None:
+        """Should include client_ip in location data when provided."""
+        handler = OwnTracksMessageHandler()
+        received_data: list[dict[str, Any]] = []
+
+        def callback(data: dict) -> None:
+            received_data.append(data)
+
+        handler.on_location(callback)
+
+        payload = json.dumps({
+            "_type": "location",
+            "lat": 51.5,
+            "lon": -0.1,
+            "tst": 1704067200,
+        }).encode()
+
+        await handler.handle_message(
+            "owntracks/john/phone", payload, client_ip="192.168.1.50"
+        )
+
+        assert_that(len(received_data), equal_to(1))
+        assert_that(received_data[0], has_entries(client_ip="192.168.1.50"))
+
+    @pytest.mark.asyncio
+    async def test_client_ip_none_not_added_to_location_data(self) -> None:
+        """Should not add client_ip key when IP is None."""
+        handler = OwnTracksMessageHandler()
+        received_data: list[dict[str, Any]] = []
+
+        def callback(data: dict) -> None:
+            received_data.append(data)
+
+        handler.on_location(callback)
+
+        payload = json.dumps({
+            "_type": "location",
+            "lat": 51.5,
+            "lon": -0.1,
+            "tst": 1704067200,
+        }).encode()
+
+        await handler.handle_message(
+            "owntracks/john/phone", payload, client_ip=None
+        )
+
+        assert_that(len(received_data), equal_to(1))
+        assert_that("client_ip" not in received_data[0], is_(True))

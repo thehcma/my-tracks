@@ -522,7 +522,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.7.0" },
     { name = "channels", specifier = ">=4.0.0" },
     { name = "daphne", specifier = ">=4.0.0" },
-    { name = "django", specifier = ">=5.0,<6.0" },
+    { name = "django", specifier = ">=5.0,<7.0" },
     { name = "djangorestframework", specifier = ">=3.14.0" },
     { name = "flake8", marker = "extra == 'dev'", specifier = ">=6.1.0" },
     { name = "gunicorn", specifier = ">=21.2.0" },
