@@ -83,7 +83,7 @@ body {
 
 .container {
     display: grid;
-    grid-template-columns: 3fr 1fr;
+    grid-template-columns: 1fr;
     height: 100vh;
     gap: 0;
 }
@@ -98,14 +98,6 @@ body {
     gap: 0;
 }
 
-.right-column {
-    padding: 20px 40px;
-    overflow-y: auto;
-    background: var(--bg-main);
-    color: var(--text-main);
-    transition: padding 0.3s ease, opacity 0.3s ease;
-    border-left: 1px solid var(--border-color);
-}
 
 h1 {
     color: var(--text-main);
@@ -484,16 +476,6 @@ a:hover {
     background: #dc3545;
 }
 
-.container.sidebar-collapsed {
-    grid-template-columns: 1fr 0fr;
-}
-
-.container.sidebar-collapsed .right-column {
-    padding: 0;
-    overflow: hidden;
-    opacity: 0;
-    pointer-events: none;
-}
 
 .map-section {
     display: flex;
