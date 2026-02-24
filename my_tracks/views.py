@@ -593,6 +593,8 @@ class AdminUserViewSet(viewsets.ViewSet):
     - GET /api/admin/users/ — list all users
     - POST /api/admin/users/ — create a new user
     - DELETE /api/admin/users/{id}/ — deactivate a user
+    - POST /api/admin/users/{id}/reactivate/ — reactivate a user
+    - POST /api/admin/users/{id}/toggle-admin/ — toggle admin status
     """
 
     permission_classes = [IsAdminUser]
@@ -625,6 +627,8 @@ class AdminUserViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        is_staff = request.data.get('is_staff', False)
+
         user = User.objects.create_user(
             username=username,
             email=request.data.get('email', ''),
@@ -632,6 +636,10 @@ class AdminUserViewSet(viewsets.ViewSet):
             first_name=request.data.get('first_name', ''),
             last_name=request.data.get('last_name', ''),
         )
+        if is_staff:
+            user.is_staff = True
+            user.is_superuser = True
+            user.save()
 
         return Response(
             UserSerializer(user).data,
@@ -658,6 +666,51 @@ class AdminUserViewSet(viewsets.ViewSet):
         user.save()
         return Response(
             {"detail": f"User '{user.username}' has been deactivated."},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=['post'], url_path='reactivate')
+    def reactivate(self, request: Request, pk: str | None = None) -> Response:
+        """Reactivate a previously deactivated user."""
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid user ID, got '{pk}' which does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        user.is_active = True
+        user.save()
+        return Response(
+            {"detail": f"User '{user.username}' has been reactivated."},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=['post'], url_path='toggle-admin')
+    def toggle_admin(self, request: Request, pk: str | None = None) -> Response:
+        """Toggle admin/staff status for a user."""
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid user ID, got '{pk}' which does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if user == request.user:
+            return Response(
+                {"error": "Cannot change your own admin status"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.is_staff = not user.is_staff
+        user.is_superuser = user.is_staff
+        user.save()
+        new_role = "admin" if user.is_staff else "user"
+        return Response(
+            {"detail": f"User '{user.username}' is now {new_role}.",
+             "is_staff": user.is_staff},
             status=status.HTTP_200_OK,
         )
 

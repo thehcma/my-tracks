@@ -364,6 +364,14 @@ a:hover {
     letter-spacing: 0.5px;
     padding: 2px 8px;
     border-radius: 10px;
+    text-decoration: none;
+    transition: background 0.2s ease;
+}
+
+.admin-badge:hover {
+    background: #b02a6e;
+    text-decoration: none;
+    color: white;
 }
 
 .logout-form {

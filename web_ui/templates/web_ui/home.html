@@ -54,7 +54,7 @@
                         <button class="header-toggle" id="sidebar-toggle" title="Toggle documentation sidebar" aria-label="Toggle sidebar">◀</button>
                         <button class="header-toggle" id="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle theme">🌙</button>
                         <div class="user-menu">
-                            {% if user.is_staff %}<span class="admin-badge" title="Administrator">admin</span>{% endif %}
+                            {% if user.is_staff %}<a href="{% url 'web_ui:admin_panel' %}" class="admin-badge" title="Open admin panel">admin</a>{% endif %}
                             <a href="{% url 'web_ui:profile' %}" class="user-name-link" title="Logged in as {{ user.username }} — click to edit profile">{{ user.username }}</a>
                             <form method="post" action="{% url 'web_ui:logout' %}" class="logout-form">
                                 {% csrf_token %}

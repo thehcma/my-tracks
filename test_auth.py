@@ -305,3 +305,83 @@ class TestAdminUserAPI:
         """Test that deactivating a nonexistent user returns 404."""
         response = admin_api_client.delete('/api/admin/users/99999/')
         assert_that(response.status_code, equal_to(status.HTTP_404_NOT_FOUND))
+
+    def test_create_admin_user(self, admin_api_client: APIClient) -> None:
+        """Test creating a user with is_staff=True makes them admin."""
+        response = admin_api_client.post(
+            '/api/admin/users/',
+            {
+                'username': 'newadmin',
+                'password': 'securepass123',
+                'is_staff': True,
+            },
+            format='json',
+        )
+        assert_that(response.status_code, equal_to(status.HTTP_201_CREATED))
+
+        created_user = User.objects.get(username='newadmin')
+        assert_that(created_user.is_staff, is_(True))
+        assert_that(created_user.is_superuser, is_(True))
+
+    def test_reactivate_user(
+        self, admin_api_client: APIClient, user: User
+    ) -> None:
+        """Test POST /api/admin/users/{id}/reactivate/ reactivates a user."""
+        user.is_active = False
+        user.save()
+
+        response = admin_api_client.post(f'/api/admin/users/{user.pk}/reactivate/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response.data['detail'], contains_string('reactivated'))
+
+        user.refresh_from_db()
+        assert_that(user.is_active, is_(True))
+
+    def test_reactivate_nonexistent_user(self, admin_api_client: APIClient) -> None:
+        """Test reactivating a nonexistent user returns 404."""
+        response = admin_api_client.post('/api/admin/users/99999/reactivate/')
+        assert_that(response.status_code, equal_to(status.HTTP_404_NOT_FOUND))
+
+    def test_toggle_admin_promotes_user(
+        self, admin_api_client: APIClient, user: User
+    ) -> None:
+        """Test toggle-admin promotes a regular user to admin."""
+        assert_that(user.is_staff, is_(False))
+
+        response = admin_api_client.post(f'/api/admin/users/{user.pk}/toggle-admin/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response.data['is_staff'], is_(True))
+
+        user.refresh_from_db()
+        assert_that(user.is_staff, is_(True))
+        assert_that(user.is_superuser, is_(True))
+
+    def test_toggle_admin_demotes_admin(
+        self, admin_api_client: APIClient, db: Any
+    ) -> None:
+        """Test toggle-admin demotes an admin to regular user."""
+        other_admin = User.objects.create_superuser(
+            username='otheradmin', password='pass123'
+        )
+        assert_that(other_admin.is_staff, is_(True))
+
+        response = admin_api_client.post(f'/api/admin/users/{other_admin.pk}/toggle-admin/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response.data['is_staff'], is_(False))
+
+        other_admin.refresh_from_db()
+        assert_that(other_admin.is_staff, is_(False))
+        assert_that(other_admin.is_superuser, is_(False))
+
+    def test_toggle_admin_self_forbidden(
+        self, admin_api_client: APIClient, admin_user: User
+    ) -> None:
+        """Test that admin cannot toggle their own admin status."""
+        response = admin_api_client.post(f'/api/admin/users/{admin_user.pk}/toggle-admin/')
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+        assert_that(response.data['error'], contains_string('own admin status'))
+
+    def test_toggle_admin_nonexistent_user(self, admin_api_client: APIClient) -> None:
+        """Test toggling admin on a nonexistent user returns 404."""
+        response = admin_api_client.post('/api/admin/users/99999/toggle-admin/')
+        assert_that(response.status_code, equal_to(status.HTTP_404_NOT_FOUND))

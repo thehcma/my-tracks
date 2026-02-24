@@ -1,0 +1,451 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - My Tracks</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --card-bg: #16213e;
+            --input-bg: #0f3460;
+            --text: #e6e6e6;
+            --text-muted: #a0a0b0;
+            --accent: #4e9af1;
+            --accent-hover: #6bb0ff;
+            --error: #e74c3c;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --border: #2a2a4a;
+            --admin-badge: #d63384;
+            --table-row-hover: rgba(78, 154, 241, 0.08);
+            --inactive-text: #666;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .admin-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .admin-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .admin-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+        }
+
+        .admin-header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .nav-links a {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
+        }
+
+        .section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .message {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.25rem;
+            font-size: 0.875rem;
+        }
+
+        .message.success {
+            background: rgba(39, 174, 96, 0.15);
+            border: 1px solid var(--success);
+            color: var(--success);
+        }
+
+        .message.error {
+            background: rgba(231, 76, 60, 0.15);
+            border: 1px solid var(--error);
+            color: var(--error);
+        }
+
+        /* Create user form */
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 0;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-bottom: 0.4rem;
+            color: var(--text-muted);
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="email"],
+        .form-group input[type="password"] {
+            width: 100%;
+            padding: 0.6rem 0.8rem;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding-top: 1.5rem;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--admin-badge);
+        }
+
+        .checkbox-group label {
+            margin-bottom: 0;
+            font-size: 0.875rem;
+            color: var(--text);
+        }
+
+        .submit-btn {
+            padding: 0.6rem 1.5rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 0.5rem;
+        }
+
+        .submit-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        /* User table */
+        .user-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        .user-table th {
+            text-align: left;
+            padding: 0.6rem 0.8rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .user-table td {
+            padding: 0.7rem 0.8rem;
+            border-bottom: 1px solid rgba(42, 42, 74, 0.5);
+            vertical-align: middle;
+        }
+
+        .user-table tr:hover td {
+            background: var(--table-row-hover);
+        }
+
+        .user-table tr.inactive td {
+            color: var(--inactive-text);
+        }
+
+        .role-pill {
+            display: inline-block;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            padding: 2px 8px;
+            border-radius: 8px;
+        }
+
+        .role-pill.admin {
+            background: var(--admin-badge);
+            color: white;
+        }
+
+        .role-pill.user {
+            background: var(--border);
+            color: var(--text-muted);
+        }
+
+        .status-pill {
+            display: inline-block;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 8px;
+        }
+
+        .status-pill.active {
+            background: rgba(39, 174, 96, 0.2);
+            color: var(--success);
+        }
+
+        .status-pill.inactive {
+            background: rgba(231, 76, 60, 0.2);
+            color: var(--error);
+        }
+
+        .action-btn {
+            padding: 3px 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 4px;
+        }
+
+        .action-btn:hover {
+            background: var(--border);
+            color: var(--text);
+        }
+
+        .action-btn.danger:hover {
+            background: rgba(231, 76, 60, 0.2);
+            border-color: var(--error);
+            color: var(--error);
+        }
+
+        .action-btn.success:hover {
+            background: rgba(39, 174, 96, 0.2);
+            border-color: var(--success);
+            color: var(--success);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .user-count {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <div class="admin-header">
+            <h1>Admin Panel</h1>
+            <div class="nav-links">
+                <a href="{% url 'web_ui:home' %}">← Back to Map</a>
+                <a href="{% url 'web_ui:profile' %}">Profile</a>
+            </div>
+        </div>
+
+        <div class="admin-card">
+            <h3 class="section-title">Create User</h3>
+
+            {% if create_success %}
+            <div class="message success">{{ create_success }}</div>
+            {% endif %}
+            {% if create_error %}
+            <div class="message error">{{ create_error }}</div>
+            {% endif %}
+
+            <form method="post" action="{% url 'web_ui:admin_panel' %}">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="create_user">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="id_username">Username</label>
+                        <input type="text" name="username" id="id_username" required autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="id_email">Email</label>
+                        <input type="email" name="email" id="id_email" autocomplete="off">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="id_first_name">First Name</label>
+                        <input type="text" name="first_name" id="id_first_name" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label for="id_last_name">Last Name</label>
+                        <input type="text" name="last_name" id="id_last_name" autocomplete="off">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="id_password">Password</label>
+                        <input type="password" name="password" id="id_password" required minlength="8" autocomplete="new-password">
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" name="is_admin" id="id_is_admin">
+                        <label for="id_is_admin">Administrator</label>
+                    </div>
+                </div>
+                <button type="submit" class="submit-btn">Create User</button>
+            </form>
+        </div>
+
+        <div class="admin-card">
+            <h3 class="section-title">Users</h3>
+
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Last Login</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr class="{% if not u.is_active %}inactive{% endif %}">
+                        <td>{{ u.username }}</td>
+                        <td>{{ u.email|default:"—" }}</td>
+                        <td>
+                            {% if u.is_staff %}
+                                <span class="role-pill admin">admin</span>
+                            {% else %}
+                                <span class="role-pill user">user</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if u.is_active %}
+                                <span class="status-pill active">active</span>
+                            {% else %}
+                                <span class="status-pill inactive">inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ u.last_login|date:"Y-m-d H:i"|default:"never" }}</td>
+                        <td>
+                            {% if u.pk != request.user.pk %}
+                                {% if u.is_active %}
+                                <form method="post" action="/api/admin/users/{{ u.pk }}/" style="display:inline" class="api-action"
+                                      data-method="DELETE" data-confirm="Deactivate user '{{ u.username }}'?">
+                                    <button type="submit" class="action-btn danger" title="Deactivate user">Deactivate</button>
+                                </form>
+                                {% else %}
+                                <form method="post" action="/api/admin/users/{{ u.pk }}/reactivate/" style="display:inline" class="api-action"
+                                      data-method="POST" data-confirm="Reactivate user '{{ u.username }}'?">
+                                    <button type="submit" class="action-btn success" title="Reactivate user">Reactivate</button>
+                                </form>
+                                {% endif %}
+                                <form method="post" action="/api/admin/users/{{ u.pk }}/toggle-admin/" style="display:inline" class="api-action"
+                                      data-method="POST" data-confirm="{% if u.is_staff %}Remove admin from{% else %}Make admin{% endif %} '{{ u.username }}'?">
+                                    <button type="submit" class="action-btn" title="Toggle admin status">
+                                        {% if u.is_staff %}Remove Admin{% else %}Make Admin{% endif %}
+                                    </button>
+                                </form>
+                            {% else %}
+                                <span style="color: var(--text-muted); font-size: 0.75rem;">you</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p class="user-count">{{ users|length }} user{{ users|length|pluralize }}</p>
+        </div>
+    </div>
+
+    <script>
+        document.querySelectorAll('.api-action').forEach(form => {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const confirmMsg = form.dataset.confirm;
+                if (confirmMsg && !window.confirm(confirmMsg)) return;
+
+                const method = form.dataset.method || 'POST';
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+
+                try {
+                    const resp = await fetch(form.action, {
+                        method: method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken,
+                        },
+                        credentials: 'same-origin',
+                    });
+                    if (resp.ok) {
+                        window.location.reload();
+                    } else {
+                        const data = await resp.json();
+                        alert(data.error || data.detail || 'Action failed');
+                    }
+                } catch {
+                    alert('Network error');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
