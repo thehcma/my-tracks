@@ -485,52 +485,6 @@ function completeStateRestore(): void {
 }
 
 // ============================================================================
-// Sidebar Management
-// ============================================================================
-
-/**
- * Get the sidebar collapsed state.
- * @returns true if sidebar should be collapsed
- */
-function getSidebarState(): boolean {
-    // Default to collapsed, but respect user preference if set
-    const saved = localStorage.getItem('sidebar-collapsed');
-    if (saved === null) {
-        return true; // Default: collapsed
-    }
-    return saved === 'true';
-}
-
-/**
- * Set the sidebar collapsed state.
- * @param collapsed - Whether sidebar should be collapsed
- */
-function setSidebarState(collapsed: boolean): void {
-    const container = document.getElementById('main-container');
-    const toggle = document.getElementById('sidebar-toggle');
-    if (collapsed) {
-        container?.classList.add('sidebar-collapsed');
-        if (toggle) toggle.textContent = '◀'; // Point left to expand (show sidebar)
-    } else {
-        container?.classList.remove('sidebar-collapsed');
-        if (toggle) toggle.textContent = '▶'; // Point right to collapse (hide sidebar)
-    }
-    localStorage.setItem('sidebar-collapsed', String(collapsed));
-    // Invalidate map size after transition
-    setTimeout(() => {
-        if (map) map!.invalidateSize();
-    }, 350);
-}
-
-/**
- * Toggle the sidebar collapsed state.
- */
-function toggleSidebar(): void {
-    const container = document.getElementById('main-container');
-    const isCollapsed = container?.classList.contains('sidebar-collapsed');
-    setSidebarState(!isCollapsed);
-}
-
 // ============================================================================
 // Map Functions
 // ============================================================================
@@ -2678,12 +2632,6 @@ function initTimeSlider(): void {
  * Initialize all event listeners.
  */
 function initEventListeners(): void {
-    // Sidebar toggle
-    const sidebarToggle = document.getElementById('sidebar-toggle');
-    if (sidebarToggle) {
-        sidebarToggle.addEventListener('click', toggleSidebar);
-    }
-
     // Theme toggle
     const themeToggle = document.getElementById('theme-toggle');
     if (themeToggle) {
@@ -2846,9 +2794,6 @@ function initEventListeners(): void {
  * Main initialization function.
  */
 function init(): void {
-    // Initialize sidebar state
-    setSidebarState(getSidebarState());
-
     // Initialize theme
     setTheme(getPreferredTheme());
 

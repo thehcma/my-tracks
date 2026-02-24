@@ -1,0 +1,160 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About & Setup - My Tracks</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
+    <link rel="stylesheet" href="{% static 'web_ui/css/main.css' %}">
+    <style>
+        body {
+            background: var(--bg-main);
+            color: var(--text-main);
+        }
+        .about-container {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .about-container h1 { margin-top: 0; }
+        .about-container h2 { margin-top: 2rem; }
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .nav-links a {
+            color: var(--link-color);
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body data-theme="dark">
+    <div class="about-container">
+        <div class="nav-links">
+            <a href="{% url 'web_ui:home' %}">← Back to Map</a>
+        </div>
+
+        <h1>🗺️ My Tracks — OwnTracks Backend</h1>
+        <p>A backend server for the OwnTracks Android/iOS app.</p>
+
+        <h2>🌐 HTTP Server</h2>
+        <div class="endpoint" id="network-info">
+            <p><strong>Status:</strong> <span style="color: var(--success-color, #4CAF50);">● Enabled</span></p>
+            <p><strong>Hostname:</strong> <code>{{ hostname }}</code></p>
+            <p><strong>Network IPs:</strong></p>
+            {% for ip in local_ips %}
+                <p><code>{{ ip }}</code></p>
+            {% empty %}
+                <p><code>Unable to detect</code></p>
+            {% endfor %}
+            <p><strong>Port:</strong> <code>{{ server_port }}</code></p>
+            <p style="margin-top: 10px;">Access from other devices on your LAN:</p>
+            {% for ip in local_ips %}
+                <p><code>http://{{ ip }}:{{ server_port }}/</code></p>
+            {% empty %}
+                <p><code>http://{{ local_ip }}:{{ server_port }}/</code></p>
+            {% endfor %}
+        </div>
+
+        <h2>📶 MQTT Broker</h2>
+        {% if mqtt_enabled %}
+        <div class="endpoint">
+            <p><strong>Status:</strong> <span style="color: var(--success-color, #4CAF50);">● Enabled</span></p>
+            <p><strong>Host:</strong></p>
+            {% for ip in local_ips %}
+                <p><code>{{ ip }}</code></p>
+            {% empty %}
+                <p><code>{{ local_ip }}</code></p>
+            {% endfor %}
+            <p><strong>Port:</strong> <code>{{ mqtt_port }}</code></p>
+            <p style="margin-top: 10px;">MQTT is recommended for better battery life and real-time updates.</p>
+        </div>
+        {% else %}
+        <div class="endpoint">
+            <p><strong>Status:</strong> <span style="color: var(--text-muted, #888);">○ Disabled</span></p>
+            <p style="font-size: 11px; color: var(--text-muted);">Start server with <code>--mqtt-port 1883</code> to enable</p>
+        </div>
+        {% endif %}
+
+        <h2>📍 API Endpoints</h2>
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="/api/">/api/</a>
+            <p>API root — Browse all available endpoints</p>
+        </div>
+        <div class="endpoint">
+            <span class="method post">POST</span>
+            <span class="method get">GET</span>
+            <a href="/api/locations/">/api/locations/</a>
+            <p>Submit and query location data</p>
+        </div>
+        <div class="endpoint">
+            <span class="method get">GET</span>
+            <a href="/api/devices/">/api/devices/</a>
+            <p>View registered devices</p>
+        </div>
+
+        <h2>📱 Configure OwnTracks App</h2>
+        <p>Set up your phone to send location data to this server:</p>
+        <div class="endpoint">
+            <p><strong>1. Install OwnTracks</strong></p>
+            <p>Download from <a href="https://play.google.com/store/apps/details?id=org.owntracks.android" target="_blank" rel="noopener noreferrer">Google Play</a> (Android) or <a href="https://apps.apple.com/app/owntracks/id692424691" target="_blank" rel="noopener noreferrer">App Store</a> (iOS)</p>
+        </div>
+        <div class="endpoint">
+            <p><strong>2. Open Preferences</strong></p>
+            <p>Tap ☰ menu → Preferences → Connection</p>
+        </div>
+        {% if mqtt_enabled %}
+        <div class="endpoint">
+            <p><strong>3. Choose Connection Mode</strong></p>
+            <p><strong>MQTT (Recommended):</strong> Better battery life, real-time updates</p>
+            <p><strong>HTTP:</strong> Simpler setup, works without persistent connection</p>
+        </div>
+        <div class="endpoint">
+            <p><strong>4a. For MQTT Mode:</strong></p>
+            <p>Mode: <code>MQTT</code></p>
+            <p>Host: <code>{{ local_ip }}</code> (use any IP shown above)</p>
+            <p>Port: <code>{{ mqtt_port }}</code></p>
+            <p>TLS: <code>OFF</code></p>
+            <p>Authentication: <code>ON</code> (use your server username/password)</p>
+        </div>
+        <div class="endpoint">
+            <p><strong>4b. For HTTP Mode:</strong></p>
+            <p>Mode: <code>HTTP</code></p>
+            <p>URL: <code>http://{{ local_ip }}:{{ server_port }}/api/locations/</code></p>
+        </div>
+        {% else %}
+        <div class="endpoint">
+            <p><strong>3. Set Mode to HTTP</strong></p>
+            <p>Mode: <code>HTTP</code></p>
+        </div>
+        <div class="endpoint">
+            <p><strong>4. Configure URL</strong></p>
+            <p>URL: <code>http://{{ local_ip }}:{{ server_port }}/api/locations/</code></p>
+        </div>
+        {% endif %}
+        <div class="endpoint">
+            <p><strong>5. Set Device Identifier</strong></p>
+            <p>Go to Identification section:</p>
+            <p>• <strong>Device ID:</strong> Your device name (e.g., <code>pixel8</code>)</p>
+            <p>• <strong>Tracker ID:</strong> 2-letter code shown on map (e.g., <code>HC</code>)</p>
+        </div>
+        <div class="endpoint">
+            <p><strong>6. Test Connection</strong></p>
+            <p>Return to map view and tap the ↑ upload button to send your current location. You should see it appear here!</p>
+        </div>
+
+        <h2>📚 Documentation</h2>
+        <ul>
+            <li><a href="https://github.com/the-hcma/my-tracks" target="_blank" rel="noopener noreferrer">GitHub Repository</a></li>
+            <li><a href="https://github.com/owntracks/android" target="_blank" rel="noopener noreferrer">OwnTracks Android App</a></li>
+        </ul>
+    </div>
+</body>
+</html>

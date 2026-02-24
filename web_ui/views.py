@@ -212,6 +212,30 @@ def profile(request: HttpRequest) -> HttpResponse:
     return render(request, 'web_ui/profile.html', context)
 
 
+@login_required
+def about(request: HttpRequest) -> HttpResponse:
+    """About & Setup page with server info and OwnTracks configuration."""
+    ips, _ = NetworkState.check_and_update_ips()
+    primary_ip = ips[0] if ips else 'Unable to detect'
+    hostname = socket.gethostname()
+    server_port = request.META.get('SERVER_PORT', '8080')
+
+    mqtt_configured_port = get_mqtt_port()
+    mqtt_actual_port = get_actual_mqtt_port()
+    mqtt_port = mqtt_actual_port if mqtt_actual_port is not None else mqtt_configured_port
+    mqtt_enabled = mqtt_configured_port >= 0
+
+    context = {
+        'hostname': hostname,
+        'local_ip': primary_ip,
+        'local_ips': ips,
+        'server_port': server_port,
+        'mqtt_port': mqtt_port,
+        'mqtt_enabled': mqtt_enabled,
+    }
+    return render(request, 'web_ui/about.html', context)
+
+
 def _is_staff(user: User) -> bool:  # type: ignore[override]
     """Check if user is staff (for use with user_passes_test decorator)."""
     return user.is_staff

@@ -230,69 +230,86 @@ class TestNetworkState:
 
 @pytest.mark.django_db
 class TestMQTTEndpointDisplay:
-    """Test MQTT endpoint display in web UI."""
+    """Test MQTT endpoint display on the about page."""
 
-    def test_home_view_shows_http_enabled(self, logged_in_client: Client) -> None:
-        """Test that home view shows HTTP server as enabled."""
-        response = logged_in_client.get('/')
+    def test_about_page_shows_http_enabled(self, logged_in_client: Client) -> None:
+        """Test that about page shows HTTP server as enabled."""
+        response = logged_in_client.get('/about/')
 
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('HTTP Server'))
         assert_that(content, contains_string('● Enabled'))
 
-    def test_home_view_shows_mqtt_disabled_by_default(self, logged_in_client: Client) -> None:
-        """Test that home view shows MQTT disabled when port < 0."""
+    def test_about_page_shows_mqtt_disabled_by_default(self, logged_in_client: Client) -> None:
+        """Test that about page shows MQTT disabled when port < 0."""
         from unittest.mock import patch
 
         with patch('web_ui.views.get_mqtt_port', return_value=-1):
-            response = logged_in_client.get('/')
+            response = logged_in_client.get('/about/')
 
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('○ Disabled'))
         assert_that(content, contains_string('--mqtt-port 1883'))
 
-    def test_home_view_shows_mqtt_enabled(self, logged_in_client: Client) -> None:
-        """Test that home view shows MQTT info when enabled."""
+    def test_about_page_shows_mqtt_enabled(self, logged_in_client: Client) -> None:
+        """Test that about page shows MQTT info when enabled."""
         from unittest.mock import patch
 
         with (
             patch('web_ui.views.get_mqtt_port', return_value=1883),
             patch('web_ui.views.get_actual_mqtt_port', return_value=None),
         ):
-            response = logged_in_client.get('/')
+            response = logged_in_client.get('/about/')
 
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('● Enabled'))
         assert_that(content, contains_string('1883'))
         assert_that(content, contains_string('MQTT Broker'))
 
-    def test_home_view_shows_actual_mqtt_port(self, logged_in_client: Client) -> None:
-        """Test that home view shows actual port when OS-allocated."""
+    def test_about_page_shows_actual_mqtt_port(self, logged_in_client: Client) -> None:
+        """Test that about page shows actual port when OS-allocated."""
         from unittest.mock import patch
 
         with (
             patch('web_ui.views.get_mqtt_port', return_value=0),
             patch('web_ui.views.get_actual_mqtt_port', return_value=54321),
         ):
-            response = logged_in_client.get('/')
+            response = logged_in_client.get('/about/')
 
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('54321'))
 
-    def test_home_view_shows_mqtt_config_instructions(self, logged_in_client: Client) -> None:
-        """Test that home view shows MQTT configuration instructions when enabled."""
+    def test_about_page_shows_mqtt_config_instructions(self, logged_in_client: Client) -> None:
+        """Test that about page shows MQTT configuration instructions when enabled."""
         from unittest.mock import patch
 
         with (
             patch('web_ui.views.get_mqtt_port', return_value=1883),
             patch('web_ui.views.get_actual_mqtt_port', return_value=None),
         ):
-            response = logged_in_client.get('/')
+            response = logged_in_client.get('/about/')
 
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('MQTT (Recommended)'))
         assert_that(content, contains_string('For MQTT Mode'))
         assert_that(content, contains_string('For HTTP Mode'))
+
+    def test_about_page_redirects_unauthenticated(self, client: Client) -> None:
+        """Test that about page redirects unauthenticated users."""
+        response = client.get('/about/')
+        assert_that(response.status_code, equal_to(status.HTTP_302_FOUND))
+
+    def test_about_page_shows_back_link(self, logged_in_client: Client) -> None:
+        """Test that about page has a back link to the map."""
+        response = logged_in_client.get('/about/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Back to Map'))
+
+    def test_hamburger_menu_shows_about_link(self, logged_in_client: Client) -> None:
+        """Test that hamburger menu contains About & Setup link."""
+        response = logged_in_client.get('/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('About &amp; Setup'))
 
 
 # CSS custom properties that must be defined in both light and dark theme blocks.

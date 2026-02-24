@@ -21,6 +21,7 @@
                             <div class="hamburger-dropdown hidden" id="hamburger-dropdown">
                                 <a href="{% url 'web_ui:profile' %}" class="hamburger-item">👤 Profile</a>
                                 {% if user.is_staff %}<a href="{% url 'web_ui:admin_panel' %}" class="hamburger-item">⚙️ Admin Panel</a>{% endif %}
+                                <a href="{% url 'web_ui:about' %}" class="hamburger-item">📖 About &amp; Setup</a>
                                 <hr class="hamburger-divider">
                                 <form method="post" action="{% url 'web_ui:logout' %}" class="hamburger-logout-form">
                                     {% csrf_token %}
@@ -63,7 +64,6 @@
                             <span class="status-dot" id="status-dot"></span>
                             <span id="status-text">Checking...</span>
                         </div>
-                        <button class="header-toggle" id="sidebar-toggle" title="Toggle documentation sidebar" aria-label="Toggle sidebar">◀</button>
                         <button class="header-toggle" id="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle theme">🌙</button>
                         <div class="user-menu">
                             {% if user.is_staff %}<span class="admin-badge" title="Administrator">admin</span>{% endif %}
@@ -93,160 +93,15 @@
                 </div>
             </div>
         </div>
-
-        <div class="right-column">
-            <h1>🗺️ My Tracks - OwnTracks Backend</h1>
-            <p>A backend server for the OwnTracks Android/iOS app.</p>
-
-            <h2>🌐 HTTP Server</h2>
-            <div class="endpoint" id="network-info">
-                <p><strong>Status:</strong> <span style="color: var(--success-color, #4CAF50);">● Enabled</span></p>
-                <p><strong>Hostname:</strong> <code id="network-hostname">{{ hostname }}</code></p>
-                <p><strong>Network IPs:</strong></p>
-                <div id="network-ips">
-                {% for ip in local_ips %}
-                    <p><code>{{ ip }}</code></p>
-                {% empty %}
-                    <p><code>Unable to detect</code></p>
-                {% endfor %}
-                </div>
-                <p><strong>Port:</strong> <code>{{ server_port }}</code></p>
-                <p style="margin-top: 10px;">Access from other devices on your LAN:</p>
-                <div id="network-urls">
-                {% for ip in local_ips %}
-                    <p><code>http://{{ ip }}:{{ server_port }}/</code></p>
-                {% empty %}
-                    <p><code>http://{{ local_ip }}:{{ server_port }}/</code></p>
-                {% endfor %}
-                </div>
-            </div>
-
-            <h2>📶 MQTT Broker</h2>
-            {% if mqtt_enabled %}
-            <div class="endpoint" id="mqtt-info">
-                <p><strong>Status:</strong> <span style="color: var(--success-color, #4CAF50);">● Enabled</span></p>
-                <p><strong>Host:</strong></p>
-                <div id="mqtt-hosts">
-                {% for ip in local_ips %}
-                    <p><code>{{ ip }}</code></p>
-                {% empty %}
-                    <p><code>{{ local_ip }}</code></p>
-                {% endfor %}
-                </div>
-                <p><strong>Port:</strong> <code id="mqtt-port">{{ mqtt_port }}</code></p>
-                <p style="margin-top: 10px;">MQTT is recommended for better battery life and real-time updates.</p>
-                <p style="font-size: 11px; color: var(--text-muted);">Use these settings in OwnTracks app (Mode: MQTT)</p>
-            </div>
-            {% else %}
-            <div class="endpoint" id="mqtt-info">
-                <p><strong>Status:</strong> <span style="color: var(--text-muted, #888);">○ Disabled</span></p>
-                <p style="font-size: 11px; color: var(--text-muted);">Start server with <code>--mqtt-port 1883</code> to enable</p>
-            </div>
-            {% endif %}
-
-            <h2>📍 API Endpoints</h2>
-
-            <div class="endpoint">
-                <span class="method get">GET</span>
-                <a href="/api/">/api/</a>
-                <p>API root - Browse all available endpoints</p>
-            </div>
-
-            <div class="endpoint">
-                <span class="method post">POST</span>
-                <span class="method get">GET</span>
-                <a href="/api/locations/">/api/locations/</a>
-                <p>Submit and query location data</p>
-            </div>
-
-            <div class="endpoint">
-                <span class="method get">GET</span>
-                <a href="/api/devices/">/api/devices/</a>
-                <p>View registered devices</p>
-            </div>
-
-            <div class="endpoint">
-                <span class="method get">GET</span>
-                <a href="/admin/">/admin/</a>
-                <p>Admin interface (requires superuser)</p>
-            </div>
-
-            <h2>🧪 Test the API</h2>
-            <p>Submit a test location:</p>
-            <pre><code>curl -X POST http://{{ local_ip }}:{{ server_port }}/api/locations/ \
-  -H "Content-Type: application/json" \
-  -d '{"lat": 37.7749, "lon": -122.4194, "tst": 1705329600, "tid": "AB"}'</code></pre>
-
-            <h2>📱 Configure OwnTracks App</h2>
-            <p>Set up your phone to send location data to this server:</p>
-            <div class="endpoint">
-                <p><strong>1. Install OwnTracks</strong></p>
-                <p>Download from <a href="https://play.google.com/store/apps/details?id=org.owntracks.android" target="_blank" rel="noopener noreferrer">Google Play</a> (Android) or <a href="https://apps.apple.com/app/owntracks/id692424691" target="_blank" rel="noopener noreferrer">App Store</a> (iOS)</p>
-            </div>
-            <div class="endpoint">
-                <p><strong>2. Open Preferences</strong></p>
-                <p>Tap ☰ menu → Preferences → Connection</p>
-            </div>
-            {% if mqtt_enabled %}
-            <div class="endpoint">
-                <p><strong>3. Choose Connection Mode</strong></p>
-                <p><strong>MQTT (Recommended):</strong> Better battery life, real-time updates</p>
-                <p><strong>HTTP:</strong> Simpler setup, works without persistent connection</p>
-            </div>
-            <div class="endpoint">
-                <p><strong>4a. For MQTT Mode:</strong></p>
-                <p>Mode: <code>MQTT</code></p>
-                <p>Host: <code id="owntracks-mqtt-host">{{ local_ip }}</code> (use any IP shown above)</p>
-                <p>Port: <code id="owntracks-mqtt-port">{{ mqtt_port }}</code></p>
-                <p>TLS: <code>OFF</code></p>
-                <p>Authentication: <code>ON</code> (use your server username/password)</p>
-            </div>
-            <div class="endpoint">
-                <p><strong>4b. For HTTP Mode:</strong></p>
-                <p>Mode: <code>HTTP</code></p>
-                <p>URL: <code id="owntracks-url">http://{{ local_ip }}:{{ server_port }}/api/locations/</code> (use any IP shown above)</p>
-            </div>
-            {% else %}
-            <div class="endpoint">
-                <p><strong>3. Set Mode to HTTP</strong></p>
-                <p>Mode: <code>HTTP</code></p>
-            </div>
-            <div class="endpoint">
-                <p><strong>4. Configure URL</strong></p>
-                <p>Host: <code id="owntracks-url">http://{{ local_ip }}:{{ server_port }}/api/locations/</code> (use any IP shown above)</p>
-                <p style="font-size: 11px; color: var(--text-muted);">Make sure your phone is on the same WiFi network</p>
-            </div>
-            {% endif %}
-            <div class="endpoint">
-                <p><strong>5. Set Device Identifier</strong></p>
-                <p>Go to Identification section:</p>
-                <p>• <strong>Device ID:</strong> Your device name (e.g., <code>pixel8</code>)</p>
-                <p>• <strong>Tracker ID:</strong> 2-letter code shown on map (e.g., <code>HC</code>)</p>
-            </div>
-            <div class="endpoint">
-                <p><strong>6. Test Connection</strong></p>
-                <p>Return to map view and tap the ↑ upload button to send your current location. You should see it appear here!</p>
-            </div>
-
-            <h2>�📚 Documentation</h2>
-            <ul>
-                <li><a href="https://github.com/the-hcma/my-tracks" target="_blank" rel="noopener noreferrer">GitHub Repository</a></li>
-                <li><a href="https://github.com/owntracks/android" target="_blank" rel="noopener noreferrer">OwnTracks Android App</a></li>
-                <li>See <code>API.md</code> for complete API reference</li>
-                <li>See <code>README.md</code> for setup instructions</li>
-            </ul>
-        </div>
     </div>
 
     <script>
-        // Configuration passed from Django to TypeScript
         window.MY_TRACKS_CONFIG = {
             hostname: "{{ hostname }}",
             localIp: "{{ local_ip }}",
             collapsePrecision: {{ collapse_precision }}
         };
 
-        // Hamburger menu toggle
         const hamburgerBtn = document.getElementById('hamburger-btn');
         const hamburgerDropdown = document.getElementById('hamburger-dropdown');
         if (hamburgerBtn && hamburgerDropdown) {
