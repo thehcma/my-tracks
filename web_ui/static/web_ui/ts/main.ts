@@ -1563,27 +1563,22 @@ function displayHistoricWaypoints(locations: TrackLocation[], showDeviceNames = 
             locationsByDevice[device].push(loc);
         });
 
-        // Build display entries with device info and per-device waypoint numbers
         interface DisplayEntry {
             loc: TrackLocation;
             deviceName: string;
-            waypointNumber: number;
             deviceColor: string;
         }
 
         const displayEntries: DisplayEntry[] = [];
 
         Object.entries(locationsByDevice).forEach(([deviceName, deviceLocations]) => {
-            // Collapse per device (API returns newest first, reverse for chronological)
             const chronological = [...deviceLocations].reverse();
             const collapsedLocations = collapseLocations(chronological);
 
-            // Create entries with waypoint numbers (oldest = #1)
-            collapsedLocations.forEach((loc, index) => {
+            collapsedLocations.forEach((loc) => {
                 displayEntries.push({
                     loc,
                     deviceName,
-                    waypointNumber: index + 1,
                     deviceColor: getDeviceColor(deviceName),
                 });
             });
@@ -1593,17 +1588,19 @@ function displayHistoricWaypoints(locations: TrackLocation[], showDeviceNames = 
         displayEntries.sort((a, b) => (b.loc.timestamp_unix || 0) - (a.loc.timestamp_unix || 0));
 
         // Display entries
-        displayEntries.forEach(({ loc, deviceName, waypointNumber, deviceColor }) => {
+        displayEntries.forEach(({ loc, deviceName, deviceColor }) => {
             const entry = document.createElement('div');
             entry.className = 'log-entry';
 
             const time = formatTime(loc.timestamp_unix || 0, true);
+            const ip = loc.ip_address || 'N/A';
             const lat = parseFloat(String(loc.latitude)).toFixed(6);
             const lon = parseFloat(String(loc.longitude)).toFixed(6);
             const acc = loc.accuracy || 'N/A';
             const alt = loc.altitude || 0;
             const vel = loc.velocity || 0;
             const batt = loc.battery_level || 'N/A';
+            const conn = loc.connection_type === 'w' ? 'WiFi' : loc.connection_type === 'm' ? 'Mobile' : 'N/A';
             const collapsedCount = loc._collapsedCount || 1;
 
             const countBadge =
@@ -1611,10 +1608,9 @@ function displayHistoricWaypoints(locations: TrackLocation[], showDeviceNames = 
                     ? `<span style="background:#6c757d;color:white;padding:1px 5px;border-radius:10px;font-size:10px;margin-left:8px;">×${collapsedCount}</span>`
                     : '';
 
-            // Show device name with color indicator (at end of line)
             const deviceBadge = `<span style="background:${deviceColor};color:white;padding:1px 6px;border-radius:10px;font-size:11px;margin-left:8px;">${deviceName}</span>`;
 
-            entry.innerHTML = `<span class="log-time"><b>#${waypointNumber}</b> ${time}</span> | <span class="log-coords">${lat}, ${lon}</span> | <span class="log-meta">acc:${acc}m alt:${alt}m vel:${vel}km/h batt:${batt}%</span>${countBadge}${deviceBadge}`;
+            entry.innerHTML = `<span class="log-time">${time}</span> | <span class="log-ip">${ip}</span> | <span class="log-coords">${lat}, ${lon}</span> | <span class="log-meta">acc:${acc}m alt:${alt}m vel:${vel}km/h batt:${batt}% ${conn}</span>${countBadge}${deviceBadge}`;
 
             container.appendChild(entry);
         });
@@ -1637,27 +1633,31 @@ function displayHistoricWaypoints(locations: TrackLocation[], showDeviceNames = 
         const displayLocations = [...collapsedLocations].reverse();
 
         // Display collapsed waypoints (newest first at top)
-        displayLocations.forEach((loc, index) => {
-            const waypointNumber = collapsedLocations.length - index; // Oldest = #1, newest = #N
+        displayLocations.forEach((loc) => {
             const entry = document.createElement('div');
             entry.className = 'log-entry';
 
-            const time = formatTime(loc.timestamp_unix || 0, true); // Always show date in historic view
+            const time = formatTime(loc.timestamp_unix || 0, true);
+            const device = loc.device_name || selectedDevice || 'Unknown';
+            const ip = loc.ip_address || 'N/A';
             const lat = parseFloat(String(loc.latitude)).toFixed(6);
             const lon = parseFloat(String(loc.longitude)).toFixed(6);
             const acc = loc.accuracy || 'N/A';
             const alt = loc.altitude || 0;
             const vel = loc.velocity || 0;
             const batt = loc.battery_level || 'N/A';
+            const conn = loc.connection_type === 'w' ? 'WiFi' : loc.connection_type === 'm' ? 'Mobile' : 'N/A';
             const collapsedCount = loc._collapsedCount || 1;
 
-            // Show count badge at end of line if multiple waypoints were collapsed
             const countBadge =
                 collapsedCount > 1
                     ? `<span style="background:#6c757d;color:white;padding:1px 5px;border-radius:10px;font-size:10px;margin-left:8px;">×${collapsedCount}</span>`
                     : '';
 
-            entry.innerHTML = `<span class="log-time"><b>#${waypointNumber}</b> ${time}</span> | <span class="log-coords">${lat}, ${lon}</span> | <span class="log-meta">acc:${acc}m alt:${alt}m vel:${vel}km/h batt:${batt}%</span>${countBadge}`;
+            const deviceColor = getDeviceColor(device);
+            const deviceBadge = `<span style="background:${deviceColor};color:white;padding:1px 6px;border-radius:10px;font-size:11px;margin-left:8px;">${device}</span>`;
+
+            entry.innerHTML = `<span class="log-time">${time}</span> | <span class="log-ip">${ip}</span> | <span class="log-coords">${lat}, ${lon}</span> | <span class="log-meta">acc:${acc}m alt:${alt}m vel:${vel}km/h batt:${batt}% ${conn}</span>${countBadge}${deviceBadge}`;
 
             container.appendChild(entry);
         });
@@ -1693,10 +1693,8 @@ function addLogEntry(location: TrackLocation, skipScroll = false): void {
     const entry = document.createElement('div');
     entry.className = 'log-entry';
 
-    const time = formatTime(location.timestamp_unix || 0, true); // Show date for context
+    const time = formatTime(location.timestamp_unix || 0, true);
     const device = location.device_name || 'Unknown';
-    const deviceId = location.device_id_display || 'N/A';
-    const trackerId = location.tid_display || '';
     const lat = parseFloat(String(location.latitude)).toFixed(6);
     const lon = parseFloat(String(location.longitude)).toFixed(6);
     const acc = location.accuracy || 'N/A';
@@ -1706,15 +1704,10 @@ function addLogEntry(location: TrackLocation, skipScroll = false): void {
     const conn = location.connection_type === 'w' ? 'WiFi' : location.connection_type === 'm' ? 'Mobile' : 'N/A';
     const ip = location.ip_address || 'N/A';
 
-    // Show device with tracker ID if available
-    let deviceDisplay = device;
-    if (trackerId) {
-        deviceDisplay = `${device} (${trackerId})`;
-    } else if (device !== deviceId) {
-        deviceDisplay = `${device} (${deviceId})`;
-    }
+    const deviceColor = getDeviceColor(device);
+    const deviceBadge = `<span style="background:${deviceColor};color:white;padding:1px 6px;border-radius:10px;font-size:11px;margin-left:8px;">${device}</span>`;
 
-    entry.innerHTML = `<span class="log-time">${time}</span> | <span class="log-device">${deviceDisplay}</span> | <span class="log-ip">${ip}</span> | <span class="log-coords">${lat}, ${lon}</span> | <span class="log-meta">acc:${acc}m alt:${alt}m vel:${vel}km/h batt:${batt}% ${conn}</span>`;
+    entry.innerHTML = `<span class="log-time">${time}</span> | <span class="log-ip">${ip}</span> | <span class="log-coords">${lat}, ${lon}</span> | <span class="log-meta">acc:${acc}m alt:${alt}m vel:${vel}km/h batt:${batt}% ${conn}</span>${deviceBadge}`;
 
     container.insertBefore(entry, container.firstChild);
 
@@ -1878,8 +1871,6 @@ async function loadLast30Minutes(): Promise<void> {
 
             const time = formatTime(loc.timestamp_unix || 0, true);
             const device = loc.device_name || 'Unknown';
-            const deviceId = loc.device_id_display || 'N/A';
-            const trackerId = loc.tid_display || '';
             const lat = parseFloat(String(loc.latitude)).toFixed(6);
             const lon = parseFloat(String(loc.longitude)).toFixed(6);
             const acc = loc.accuracy || 'N/A';
@@ -1895,16 +1886,10 @@ async function loadLast30Minutes(): Promise<void> {
             }
             locationsByDevice[device].push(loc);
 
-            let deviceDisplay = device;
-            if (trackerId) {
-                deviceDisplay = `${device} (${trackerId})`;
-            } else if (device !== deviceId) {
-                deviceDisplay = `${device} (${deviceId})`;
-            }
-
-            // Add color indicator for device
             const deviceColor = getDeviceColor(device);
-            entry.innerHTML = `<span class="log-time">${time}</span> | <span class="log-device" style="color:${deviceColor}">${deviceDisplay}</span> | <span class="log-ip">${ip}</span> | <span class="log-coords">${lat}, ${lon}</span> | <span class="log-meta">acc:${acc}m alt:${alt}m vel:${vel}km/h batt:${batt}% ${conn}</span>`;
+            const deviceBadge = `<span style="background:${deviceColor};color:white;padding:1px 6px;border-radius:10px;font-size:11px;margin-left:8px;">${device}</span>`;
+
+            entry.innerHTML = `<span class="log-time">${time}</span> | <span class="log-ip">${ip}</span> | <span class="log-coords">${lat}, ${lon}</span> | <span class="log-meta">acc:${acc}m alt:${alt}m vel:${vel}km/h batt:${batt}% ${conn}</span>${deviceBadge}`;
 
             container.appendChild(entry);
 
@@ -2054,10 +2039,8 @@ async function loadLiveActivityHistory(): Promise<void> {
             const entry = document.createElement('div');
             entry.className = 'log-entry';
 
-            const time = formatTime(loc.timestamp_unix || 0, true); // Show date for context
+            const time = formatTime(loc.timestamp_unix || 0, true);
             const device = loc.device_name || 'Unknown';
-            const deviceId = loc.device_id_display || 'N/A';
-            const trackerId = loc.tid_display || '';
             const lat = parseFloat(String(loc.latitude)).toFixed(6);
             const lon = parseFloat(String(loc.longitude)).toFixed(6);
             const acc = loc.accuracy || 'N/A';
@@ -2073,16 +2056,10 @@ async function loadLiveActivityHistory(): Promise<void> {
             }
             locationsByDevice[device].push(loc);
 
-            let deviceDisplay = device;
-            if (trackerId) {
-                deviceDisplay = `${device} (${trackerId})`;
-            } else if (device !== deviceId) {
-                deviceDisplay = `${device} (${deviceId})`;
-            }
-
-            // Add color indicator for device
             const deviceColor = getDeviceColor(device);
-            entry.innerHTML = `<span class="log-time">${time}</span> | <span class="log-device" style="color:${deviceColor}">${deviceDisplay}</span> | <span class="log-ip">${ip}</span> | <span class="log-coords">${lat}, ${lon}</span> | <span class="log-meta">acc:${acc}m alt:${alt}m vel:${vel}km/h batt:${batt}% ${conn}</span>`;
+            const deviceBadge = `<span style="background:${deviceColor};color:white;padding:1px 6px;border-radius:10px;font-size:11px;margin-left:8px;">${device}</span>`;
+
+            entry.innerHTML = `<span class="log-time">${time}</span> | <span class="log-ip">${ip}</span> | <span class="log-coords">${lat}, ${lon}</span> | <span class="log-meta">acc:${acc}m alt:${alt}m vel:${vel}km/h batt:${batt}% ${conn}</span>${deviceBadge}`;
 
             container.appendChild(entry);
 
