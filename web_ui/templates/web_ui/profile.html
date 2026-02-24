@@ -1,0 +1,271 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - My Tracks</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --card-bg: #16213e;
+            --input-bg: #0f3460;
+            --text: #e6e6e6;
+            --text-muted: #a0a0b0;
+            --accent: #4e9af1;
+            --accent-hover: #6bb0ff;
+            --error: #e74c3c;
+            --success: #27ae60;
+            --border: #2a2a4a;
+            --admin-badge: #d63384;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .profile-container {
+            width: 100%;
+            max-width: 480px;
+            padding: 2rem;
+        }
+
+        .profile-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2.5rem;
+        }
+
+        .profile-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .profile-header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .profile-header .role-badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 3px 12px;
+            border-radius: 10px;
+        }
+
+        .role-badge.admin {
+            background: var(--admin-badge);
+            color: white;
+        }
+
+        .role-badge.user {
+            background: var(--border);
+            color: var(--text-muted);
+        }
+
+        .nav-links {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .nav-links a {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
+        }
+
+        .section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .form-group input:read-only {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .submit-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .message {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.25rem;
+            font-size: 0.875rem;
+        }
+
+        .message.success {
+            background: rgba(39, 174, 96, 0.15);
+            border: 1px solid var(--success);
+            color: var(--success);
+        }
+
+        .message.error {
+            background: rgba(231, 76, 60, 0.15);
+            border: 1px solid var(--error);
+            color: var(--error);
+        }
+
+        .section-divider {
+            margin: 2rem 0;
+            border: none;
+            border-top: 1px solid var(--border);
+        }
+
+        .meta-info {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="profile-container">
+        <div class="profile-card">
+            <div class="profile-header">
+                <h1>{{ user.username }}</h1>
+                {% if user.is_staff %}
+                    <span class="role-badge admin">Administrator</span>
+                {% else %}
+                    <span class="role-badge user">User</span>
+                {% endif %}
+            </div>
+
+            <div class="nav-links">
+                <a href="{% url 'web_ui:home' %}">← Back to Map</a>
+            </div>
+
+            {% if profile_success %}
+            <div class="message success">{{ profile_success }}</div>
+            {% endif %}
+            {% if profile_error %}
+            <div class="message error">{{ profile_error }}</div>
+            {% endif %}
+            {% if password_success %}
+            <div class="message success">{{ password_success }}</div>
+            {% endif %}
+            {% if password_error %}
+            <div class="message error">{{ password_error }}</div>
+            {% endif %}
+
+            <h3 class="section-title">Profile</h3>
+            <form method="post" action="{% url 'web_ui:profile' %}">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="profile">
+                <div class="form-group">
+                    <label for="id_username">Username</label>
+                    <input type="text" id="id_username" value="{{ user.username }}" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="id_first_name">First Name</label>
+                    <input type="text" name="first_name" id="id_first_name" value="{{ user.first_name }}">
+                </div>
+                <div class="form-group">
+                    <label for="id_last_name">Last Name</label>
+                    <input type="text" name="last_name" id="id_last_name" value="{{ user.last_name }}">
+                </div>
+                <div class="form-group">
+                    <label for="id_email">Email</label>
+                    <input type="email" name="email" id="id_email" value="{{ user.email }}">
+                </div>
+                <button type="submit" class="submit-btn">Save Profile</button>
+            </form>
+
+            <hr class="section-divider">
+
+            <h3 class="section-title">Change Password</h3>
+            <form method="post" action="{% url 'web_ui:profile' %}">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="password">
+                <div class="form-group">
+                    <label for="id_current_password">Current Password</label>
+                    <input type="password" name="current_password" id="id_current_password" required>
+                </div>
+                <div class="form-group">
+                    <label for="id_new_password">New Password</label>
+                    <input type="password" name="new_password" id="id_new_password" required minlength="8">
+                </div>
+                <div class="form-group">
+                    <label for="id_confirm_password">Confirm New Password</label>
+                    <input type="password" name="confirm_password" id="id_confirm_password" required minlength="8">
+                </div>
+                <button type="submit" class="submit-btn">Change Password</button>
+            </form>
+
+            <div class="meta-info">
+                Member since {{ user.date_joined|date:"N j, Y" }}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

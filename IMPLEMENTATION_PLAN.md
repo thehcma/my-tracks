@@ -109,19 +109,22 @@ Evolution plan for My Tracks, a Django-based backend for the OwnTracks location 
    - Skip MQTT broker during management commands, handle port-in-use gracefully ✅ (PR #194)
    - Tests for authenticated/unauthenticated access, login/logout flows, permissions, CRUD
 
-## Upcoming Work
+2. **User Profile Page, Admin Badge & Session Management** ✅ (PR #247)
+   - Admin vs regular user differentiation:
+     - Admin badge in header for staff users (pink "admin" pill)
+     - Role badge on profile page (Administrator / User)
+   - Web UI profile page (`/profile/`):
+     - Display and edit user's full name (first name, last name)
+     - Display and edit email address
+     - Change password form with Django password validators
+     - Session preserved after password change (`update_session_auth_hash`)
+     - Username in header links to profile page
+   - Session management:
+     - 7-day sliding window expiry (`SESSION_COOKIE_AGE = 604800`)
+     - `SESSION_SAVE_EVERY_REQUEST = True` to reset expiry on each request
+   - 18 new tests for admin badge, profile CRUD, password flows, session config
 
-### Phase 6, Step 1b: User Profile Page & Session Management ← NEXT
-- Web UI profile page (`/profile/`):
-  - Display and edit user's full name (first name, last name)
-  - Display and edit email address
-  - Change password form (current password + new password + confirm)
-  - Link to profile page from the user menu in the header
-- Session expiration:
-  - Sessions expire after 7 days of inactivity (`SESSION_COOKIE_AGE = 604800`)
-  - Force re-authentication after session expires (redirect to login)
-  - `SESSION_SAVE_EVERY_REQUEST = True` to reset expiry on each request (sliding window)
-- Tests for profile page rendering, form validation, session expiry behavior
+## Upcoming Work
 
 ### Phase 6, Step 2: Global CA Configuration (Admin-Owned)
 - `CertificateAuthority` model storing CA certificate + private key (encrypted at rest)
@@ -168,7 +171,7 @@ my_tracks/mqtt/
 
 ## Test Coverage
 
-- 409 Python tests + 79 TypeScript tests passing
+- 441 Python tests + 79 TypeScript tests passing
 - 92% code coverage
 - All pyright checks pass
 

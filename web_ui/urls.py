@@ -9,6 +9,7 @@ app_name = 'web_ui'
 
 urlpatterns = [
     path('', views.home, name='home'),
+    path('profile/', views.profile, name='profile'),
     path('health/', views.health, name='health'),
     path('network-info/', views.network_info, name='network_info'),
     path('login/', LoginView.as_view(template_name='web_ui/login.html'), name='login'),
