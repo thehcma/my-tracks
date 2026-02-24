@@ -1,19 +1,20 @@
-# MQTT Implementation Status
+# My Tracks — Implementation Plan
 
 **Last Updated**: February 23, 2026
 
 ## Overview
 
-Implementing embedded MQTT broker for OwnTracks bidirectional communication.
+Evolution plan for My Tracks, a Django-based backend for the OwnTracks location tracking app.
 
-**Goals**:
-- Battery life improvement (MQTT vs HTTP polling)
-- Bidirectional communication (send commands to devices)
-- Real-time location updates
+**Core Goals**:
+- Persist and visualize geolocation data
+- Battery-efficient real-time updates via embedded MQTT broker
+- Bidirectional device communication (send commands to devices)
+- User authentication and TLS certificate management
 
 ## Completed Phases
 
-### Phase 1: Basic Broker ✅
+### Phase 1: Basic MQTT Broker ✅
 - **PR #100** - amqtt dependency (MERGED)
 - Added `amqtt` from git (Python 3.14 compatible)
 - Created `MQTTBroker` class wrapper
@@ -39,50 +40,46 @@ Implementing embedded MQTT broker for OwnTracks bidirectional communication.
   - `POST /api/commands/set-waypoints/`
   - `POST /api/commands/clear-waypoints/`
 
-### Phase 5.1: Server Integration ✅
-- **PR #104** - MQTT broker startup (MERGED)
-- `--mqtt-port` flag (default: 1883, 0 = OS allocates, -1 = disabled)
-- `--http-port` flag (renamed from `--port`)
-- Runtime config via JSON file (`config/.runtime-config.json`)
-- OS-allocated port discovery via `actual_mqtt_port` property
-- ASGI lifespan handler starts/stops broker
+### Phase 5: Integration ✅
 
-## Phase 5: Integration ✅
+1. **Server integration** ✅ (PR #104)
+   - `--mqtt-port` flag (default: 1883, 0 = OS allocates, -1 = disabled)
+   - `--http-port` flag (renamed from `--port`)
+   - Runtime config via JSON file (`config/.runtime-config.json`)
+   - OS-allocated port discovery via `actual_mqtt_port` property
+   - ASGI lifespan handler starts/stops broker
 
-### Tasks:
-1. ~~**Server integration**~~ ✅ (PR #104)
-
-2. ~~**Admin UI MQTT endpoint display**~~ ✅ (PR #105)
+2. **Admin UI MQTT endpoint display** ✅ (PR #105)
    - Show HTTP/MQTT status in web UI with consistent format
    - Display MQTT host and port for OwnTracks app configuration
    - Updated OwnTracks setup instructions for both MQTT and HTTP modes
 
-3. ~~**Wire message handlers**~~ ✅
+3. **Wire message handlers** ✅
    - Connect `OwnTracksMessageHandler` to broker via amqtt plugin
    - Process incoming location messages → save to database
    - Broadcast to WebSocket clients via channel layer
    - Created `OwnTracksPlugin` with `on_broker_message_received` hook
 
-4. ~~**Graceful process termination**~~ ✅
+4. **Graceful process termination** ✅
    - `graceful_kill()` function: SIGTERM first, configurable wait, SIGKILL fallback
    - Uses signal names (TERM, KILL) instead of numbers
    - Applied to server PID, orphaned HTTP, and orphaned MQTT processes
 
-5. ~~**Traffic generator MQTT support**~~ ✅ (PR #126)
+5. **Traffic generator MQTT support** ✅ (PR #126)
    - Added `--mqtt` flag to `generate-tail` traffic generator
    - `MQTTTransport` class wrapping `amqtt.client.MQTTClient`
    - Auto-detects MQTT port from server's runtime config
    - `--mqtt-host`, `--mqtt-port`, `--mqtt-user`, `--mqtt-password` options
    - 38 new tests in `test_generate_tail.py`
 
-6. ~~**LWT handling**~~ ✅ (PR #128)
+6. **LWT handling** ✅ (PR #128)
    - Added `is_online` field to Device model
    - `save_lwt_to_db()` marks device offline, stores LWT payload
    - `save_location_to_db()` marks device online when location received
    - Real-time WebSocket broadcast of device status changes
    - Admin UI shows online/offline status with filtering
 
-7. ~~**Historic view date & time picker**~~ ✅ (PR #130)
+7. **Historic view date & time picker** ✅ (PR #130)
    - Replaced time range `<select>` with date picker + dual-handle time slider
    - Date picker (`<input type="date">`) to select any past day (default: today)
    - noUiSlider dual-handle range (00:00–23:59) to select time window within day
@@ -90,31 +87,31 @@ Implementing embedded MQTT broker for OwnTracks bidirectional communication.
    - Added `end_time` Unix timestamp parameter to API
    - Shared utility functions in `utils.ts` with 12 new TypeScript tests
 
-## Phase 6: Account Management (NEXT)
+### Phase 6: Account Management ✅ (Step 1)
 
-User authentication, per-user configuration, and TLS certificate management.
+1. **User Authentication & Account Management API** ✅ (PR #193)
+   - Enforce authentication on all API endpoints (reject unauthenticated requests)
+   - Web UI login/logout:
+     - Login page using Django's `LoginView` (session-based auth)
+     - Logout via Django's `LogoutView` (POST-based, CSRF-protected)
+     - All web UI views require login (redirect unauthenticated users to login page)
+     - Username display and logout button in header ✅ (PR #195)
+   - REST endpoints for account self-service:
+     - `GET /api/account/` — retrieve current user profile
+     - `PATCH /api/account/` — update profile fields
+     - `POST /api/account/change-password/` — change password
+   - Admin endpoints for user lifecycle:
+     - `POST /api/admin/users/` — create user
+     - `DELETE /api/admin/users/{id}/` — deactivate user
+     - `GET /api/admin/users/` — list users
+   - `UserProfile` model (extends Django User) for per-user settings
+   - Auth strategy: session auth for web UI, API key/token auth for REST clients
+   - Skip MQTT broker during management commands, handle port-in-use gracefully ✅ (PR #194)
+   - Tests for authenticated/unauthenticated access, login/logout flows, permissions, CRUD
 
-### Step 1: User Authentication & Account Management API
-- ~~Enforce authentication on all API endpoints (reject unauthenticated requests)~~ ✅ (PR #193)
-- ~~Web UI login/logout~~ ✅ (PR #193):
-  - Login page using Django's `LoginView` (session-based auth)
-  - Logout via Django's `LogoutView` (POST-based, CSRF-protected)
-  - All web UI views require login (redirect unauthenticated users to login page)
-  - Username display and logout button in header ✅ (PR #195)
-- ~~REST endpoints for account self-service~~ ✅ (PR #193):
-  - `GET /api/account/` — retrieve current user profile
-  - `PATCH /api/account/` — update profile fields
-  - `POST /api/account/change-password/` — change password
-- ~~Admin endpoints for user lifecycle~~ ✅ (PR #193):
-  - `POST /api/admin/users/` — create user
-  - `DELETE /api/admin/users/{id}/` — deactivate user
-  - `GET /api/admin/users/` — list users
-- ~~`UserProfile` model (extends Django User) for per-user settings~~ ✅ (PR #193)
-- ~~Auth strategy: session auth for web UI, API key/token auth for REST clients~~ ✅ (PR #193)
-- ~~Skip MQTT broker during management commands, handle port-in-use gracefully~~ ✅ (PR #194)
-- ~~Tests for authenticated/unauthenticated access, login/logout flows, permissions, CRUD~~ ✅ (PR #193)
+## Upcoming Work
 
-### Step 1b: User Profile Page & Session Management ← NEXT
+### Phase 6, Step 1b: User Profile Page & Session Management ← NEXT
 - Web UI profile page (`/profile/`):
   - Display and edit user's full name (first name, last name)
   - Display and edit email address
@@ -126,7 +123,7 @@ User authentication, per-user configuration, and TLS certificate management.
   - `SESSION_SAVE_EVERY_REQUEST = True` to reset expiry on each request (sliding window)
 - Tests for profile page rendering, form validation, session expiry behavior
 
-### Step 2: Global CA Configuration (Admin-Owned)
+### Phase 6, Step 2: Global CA Configuration (Admin-Owned)
 - `CertificateAuthority` model storing CA certificate + private key (encrypted at rest)
 - Admin-only REST endpoints:
   - `POST /api/admin/ca/` — generate or upload a CA certificate
@@ -137,7 +134,7 @@ User authentication, per-user configuration, and TLS certificate management.
 - CA certificate downloadable for device trust-store provisioning
 - Tests for admin-only access, key generation, rotation
 
-### Step 3: Per-User Certificate Configuration
+### Phase 6, Step 3: Per-User Certificate Configuration
 - `UserCertificate` model (FK → User, FK → CA) storing:
   - Client certificate (PEM)
   - Private key (encrypted at rest)
@@ -152,23 +149,10 @@ User authentication, per-user configuration, and TLS certificate management.
 - OwnTracks device configuration includes cert download/install instructions
 - Tests for cert generation, signing chain validation, revocation, MQTT TLS auth
 
-## Phase 7: Integration (continued)
-
-1. **Transition events**
-   - Handle region enter/exit events
-   - Store transition history
-
-2. **Waypoints sync**
-   - Connect waypoint storage to command API
-   - Allow UI to send waypoints to devices
-
-3. **Friends feature**
-    - Handle card messages (`_type: "card"`) containing user info (name, avatar)
-    - Create Friend relationship model (user-to-user permissions)
-    - Filter location broadcasts based on friend relationships
-    - Publish card messages to friends when users connect
-    - Add API endpoints for managing friend lists
-    - Update WebSocket to respect friend permissions
+### Phase 7: Advanced Integration
+1. **Transition events** — Handle region enter/exit events, store transition history
+2. **Waypoints sync** — Connect waypoint storage to command API, allow UI to send waypoints to devices
+3. **Friends feature** — Handle card messages (`_type: "card"`), friend relationship model, filtered location broadcasts, friend list API, WebSocket permission filtering
 
 ## Key Files
 
@@ -195,10 +179,6 @@ my_tracks/mqtt/
 - **Django ORM in async**: Use `sync_to_async` wrapper
 - **SQLite async tests**: Use `@pytest.mark.django_db(transaction=True)`
 
-## Next Steps
-
-Phase 6 Step 1b (User Profile Page & Session Management) is the immediate priority. Step 1 core auth is complete (PRs #193–#195).
-
 ## Future Enhancements
 
-- **MQTT over TLS** - Add `--mqtt-tls-port` (8883) for encrypted connections (partially addressed by Phase 6 cert work)
+- **MQTT over TLS** — Add `--mqtt-tls-port` (8883) for encrypted connections (partially addressed by Phase 6 cert work)
