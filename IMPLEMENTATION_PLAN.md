@@ -1,6 +1,6 @@
 # My Tracks — Implementation Plan
 
-**Last Updated**: February 25, 2026
+**Last Updated**: February 26, 2026
 
 ## Overview
 
@@ -135,35 +135,76 @@ Evolution plan for My Tracks, a Django-based backend for the OwnTracks location 
    - Documentation sidebar moved to dedicated `/about/` page
    - 20+ new tests for admin access, user CRUD, hamburger menu, about page
 
+4. **PKI — CA Certificate Management** ✅ (PR #261, #262)
+   - `CertificateAuthority` model with encrypted private key storage (Fernet + SECRET_KEY)
+   - CA generation: self-signed X.509, configurable CN and validity (1–36500 days), 4096-bit RSA
+   - Admin REST API: list, create, deactivate, download, get active CA
+   - Admin panel UI: active CA details (fingerprint, validity, download), generate form, CA history table
+   - Expunge action for permanently deleting inactive CAs
+   - Confirmation dialog shows active CA name and expiry before replacement
+   - 31+ tests for crypto utilities, model, API, permissions, admin panel
+
+5. **Enhanced User Management** ✅ (PR #268)
+   - Permanent user deletion (`DELETE /api/admin/users/{id}/hard-delete/`)
+   - Admin password reset (`POST /api/admin/users/{id}/set-password/`) with modal UI
+   - Self-deletion and self-password-reset blocked
+   - 12 new API + UI tests
+
+6. **Password Visibility Toggles** ✅ (PR #265, #267, #273)
+   - Eye icon toggle on login page, admin panel create-user form, and profile change-password form
+   - Inline SVG icons (eye/eye-off), `aria-label` for accessibility, per-field independent toggles
+
 ## Upcoming Work
 
-### Phase 6, Step 2b: PKI — Certificate Authority & Server Certificate ← NEXT
-Admin panel for managing a CA and server certificate used for MQTT TLS.
+### Phase 6, Step 2b: PKI — Configurable Key Size & Server Certificate ← NEXT
+Configurable RSA key size across all PKI operations, plus server certificate for MQTT TLS.
 
-- **CA Certificate Management**
-  - `CertificateAuthority` model storing CA certificate + private key (encrypted at rest)
-  - CA generation UI in admin panel: generate new self-signed CA with configurable validity period
-  - CA key stored encrypted using Django's `SECRET_KEY` or a dedicated encryption key
-  - Only one active CA at a time (singleton pattern with history)
-  - Display CA status: subject, expiry, fingerprint, number of issued certs
-  - CA certificate downloadable for device trust-store provisioning
-  - Admin REST endpoints:
-    - `POST /api/admin/pki/ca/` — generate new CA certificate
-    - `GET /api/admin/pki/ca/` — retrieve CA certificate (public part only)
-    - `DELETE /api/admin/pki/ca/` — revoke/rotate CA
-  - Tests for admin-only access, key generation, rotation, encryption at rest
+- **2b-i: Configurable RSA Key Size** (PR 1 in stack)
+  - Add `key_size` parameter to `generate_ca_certificate()` (default 4096, choices: 2048, 3072, 4096)
+  - Add `key_size` field to `CertificateAuthority` model to record key size used
+  - Admin panel UI: key size dropdown in CA generation form
+  - API: accept `key_size` in `POST /api/admin/pki/ca/`
+  - Migration for new `key_size` column (default 4096 for existing CAs)
+  - Tests for key size validation, model field, API parameter, UI dropdown
 
-- **Server Certificate (for MQTT TLS)**
-  - `ServerCertificate` model storing server cert + private key (signed by CA)
-  - Server cert generation UI in admin panel: issue server certificate from active CA
-  - Server cert includes all local IPs and hostname as SANs (Subject Alternative Names)
-  - Used by MQTT broker for TLS listener (`--mqtt-tls-port 8883`)
-  - Display server cert status: subject, SANs, expiry, issuer (CA)
-  - Admin REST endpoints:
-    - `POST /api/admin/pki/server-cert/` — generate server certificate from CA
-    - `GET /api/admin/pki/server-cert/` — retrieve server certificate
-  - MQTT broker updated to use server certificate for TLS connections
-  - Tests for server cert generation, SAN validation, CA chain, MQTT TLS listener
+- **2b-ii: Server Certificate Model & Generation** (PR 2 in stack)
+  - `ServerCertificate` model storing server cert + private key (signed by active CA):
+    - Certificate PEM, encrypted private key, common name, fingerprint
+    - `not_valid_before`, `not_valid_after`, `is_active` (singleton pattern with history)
+    - `key_size` (configurable: 2048, 3072, 4096), SANs list (JSON)
+    - FK → `CertificateAuthority` (issuing CA)
+  - `generate_server_certificate()` in `pki.py`:
+    - Accepts CA cert + key, server CN, validity days, key size, SANs
+    - Generates RSA key, creates X.509 cert signed by CA
+    - Includes SANs: all local IPs + hostname + user-provided entries
+    - Key usage: `digitalSignature`, `keyEncipherment`; extended: `serverAuth`
+  - Auto-detect local IPs and hostname for default SANs
+  - Admin REST API:
+    - `POST /api/admin/pki/server-cert/` — generate server cert from active CA
+    - `GET /api/admin/pki/server-cert/` — list server certs
+    - `GET /api/admin/pki/server-cert/active/` — get active server cert
+    - `GET /api/admin/pki/server-cert/{id}/download/` — download cert PEM
+    - `DELETE /api/admin/pki/server-cert/{id}/` — deactivate server cert
+    - `DELETE /api/admin/pki/server-cert/{id}/expunge/` — permanently delete inactive cert
+  - Tests for server cert generation, SAN validation, CA chain, key size, model, API
+
+- **2b-iii: Server Certificate Admin UI** (PR 3 in stack)
+  - Admin panel section: "Server Certificate (MQTT TLS)"
+  - Display active server cert: CN, SANs, fingerprint, validity, issuing CA, key size
+  - Generate form: CN (default hostname), validity days, key size dropdown, additional SANs
+  - Confirmation dialog when replacing active cert (show current cert details)
+  - Server cert history table with download and expunge actions
+  - Requires active CA — form disabled with message if no active CA exists
+  - Tests for admin panel rendering, form behavior, CA dependency
+
+- **2b-iv: MQTT Broker TLS Integration** (PR 4 in stack)
+  - MQTT broker reads active server cert from database at startup
+  - `--mqtt-tls-port` flag (default: 8883, -1 = disabled)
+  - Broker presents server certificate for TLS connections
+  - Write cert/key to temporary files for amqtt TLS configuration
+  - Display TLS status and port in web UI (About & Setup page)
+  - OwnTracks setup instructions updated for TLS mode
+  - Tests for TLS listener startup, cert loading, config flag
 
 ### Phase 6, Step 3: Per-User Client Certificate Management
 Admin issues/revokes client certificates; users view and download their own.
@@ -214,8 +255,8 @@ my_tracks/mqtt/
 
 ## Test Coverage
 
-- 466 Python tests + 79 TypeScript tests passing
-- 92% code coverage
+- 530 Python tests + 79 TypeScript tests passing
+- 90%+ code coverage
 - All pyright checks pass
 
 ## Technical Notes
