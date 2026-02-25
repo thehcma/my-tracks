@@ -1,6 +1,6 @@
 # My Tracks — Implementation Plan
 
-**Last Updated**: February 24, 2026
+**Last Updated**: February 25, 2026
 
 ## Overview
 
@@ -124,60 +124,76 @@ Evolution plan for My Tracks, a Django-based backend for the OwnTracks location 
      - `SESSION_SAVE_EVERY_REQUEST = True` to reset expiry on each request
    - 18 new tests for admin badge, profile CRUD, password flows, session config
 
+3. **Admin Dashboard & Navigation** ✅ (PR #251, #253, #254)
+   - Admin-only route (`/admin-panel/`), guarded by `@login_required` + `@user_passes_test(is_staff)`
+   - User list: table of all users showing username, email, role, status, last login
+   - Create user form: username, email, first name, last name, password, admin toggle
+   - Deactivate/reactivate users (soft delete via `is_active` flag)
+   - Toggle admin/regular role (with self-toggle protection)
+   - API endpoints: `POST /api/admin/users/{id}/reactivate/`, `POST /api/admin/users/{id}/toggle-admin/`
+   - Hamburger navigation menu with Profile, Admin Panel (admin-only), About & Setup, Logout
+   - Documentation sidebar moved to dedicated `/about/` page
+   - 20+ new tests for admin access, user CRUD, hamburger menu, about page
+
 ## Upcoming Work
 
-### Phase 6, Step 2: Admin Dashboard ← NEXT
-Admin-only web UI page (`/admin-panel/`) for managing users and system settings.
+### Phase 6, Step 2b: PKI — Certificate Authority & Server Certificate ← NEXT
+Admin panel for managing a CA and server certificate used for MQTT TLS.
 
-- **2a: Admin Page & User Management**
-  - Admin-only route (`/admin-panel/`), guarded by `is_staff` check
-  - Link in header (visible only to admin users)
-  - User list: table of all users showing username, email, role, status, last login
-  - Create user form: username, email, password, admin toggle (`is_staff`)
-  - Deactivate/reactivate users (soft delete via `is_active` flag)
-  - Uses existing `AdminUserViewSet` API as backend
-  - Consistent styling with login and profile pages
-  - Tests for admin access guard, user CRUD from UI, non-admin rejection
-
-- **2b: CA Certificate Management (Admin Panel)**
+- **CA Certificate Management**
   - `CertificateAuthority` model storing CA certificate + private key (encrypted at rest)
-  - CA generation UI in admin panel: generate new CA with configurable validity period
+  - CA generation UI in admin panel: generate new self-signed CA with configurable validity period
   - CA key stored encrypted using Django's `SECRET_KEY` or a dedicated encryption key
   - Only one active CA at a time (singleton pattern with history)
   - Display CA status: subject, expiry, fingerprint, number of issued certs
   - CA certificate downloadable for device trust-store provisioning
   - Admin REST endpoints:
-    - `POST /api/admin/ca/` — generate or upload a CA certificate
-    - `GET /api/admin/ca/` — retrieve CA certificate (public part only)
-    - `DELETE /api/admin/ca/` — revoke/rotate CA
+    - `POST /api/admin/pki/ca/` — generate new CA certificate
+    - `GET /api/admin/pki/ca/` — retrieve CA certificate (public part only)
+    - `DELETE /api/admin/pki/ca/` — revoke/rotate CA
   - Tests for admin-only access, key generation, rotation, encryption at rest
 
-### Phase 6, Step 3: Per-User Certificate Allocation
-Issue client certificates signed by the CA, allocated per user from the admin panel.
+- **Server Certificate (for MQTT TLS)**
+  - `ServerCertificate` model storing server cert + private key (signed by CA)
+  - Server cert generation UI in admin panel: issue server certificate from active CA
+  - Server cert includes all local IPs and hostname as SANs (Subject Alternative Names)
+  - Used by MQTT broker for TLS listener (`--mqtt-tls-port 8883`)
+  - Display server cert status: subject, SANs, expiry, issuer (CA)
+  - Admin REST endpoints:
+    - `POST /api/admin/pki/server-cert/` — generate server certificate from CA
+    - `GET /api/admin/pki/server-cert/` — retrieve server certificate
+  - MQTT broker updated to use server certificate for TLS connections
+  - Tests for server cert generation, SAN validation, CA chain, MQTT TLS listener
 
-- **3a: Certificate Model & Issuance**
-  - `UserCertificate` model (FK → User, FK → CA) storing:
+### Phase 6, Step 3: Per-User Client Certificate Management
+Admin issues/revokes client certificates; users view and download their own.
+
+- **3a: Client Certificate Issuance & Revocation (Admin Panel)**
+  - `ClientCertificate` model (FK → User, FK → CA) storing:
     - Client certificate (PEM)
     - Private key (encrypted at rest)
-    - Serial number, expiry date, revocation status
+    - Serial number, expiry date, revocation status, revocation date
   - Certificate generation using `cryptography` library (X.509, RSA/EC keys)
-  - Admin panel UI: issue certificate for a user, view all issued certs, revoke certs
+  - Admin panel UI:
+    - Issue certificate for a specific user (select user, set validity)
+    - View all issued certificates with status (active/revoked/expired)
+    - Revoke a certificate (marks as revoked, MQTT broker rejects on next connect)
   - Admin REST endpoints:
-    - `POST /api/admin/certificates/` — issue certificate for a user
-    - `GET /api/admin/certificates/` — list all issued certificates
-    - `DELETE /api/admin/certificates/{id}/` — revoke a certificate
-  - Tests for cert generation, signing chain validation, revocation
+    - `POST /api/admin/pki/client-certs/` — issue certificate for a user
+    - `GET /api/admin/pki/client-certs/` — list all issued certificates
+    - `POST /api/admin/pki/client-certs/{id}/revoke/` — revoke a certificate
+  - Tests for cert generation, signing chain validation, revocation, admin-only access
 
 - **3b: User Certificate Access & OwnTracks Configuration**
   - Profile page (`/profile/`) shows allocated certificate:
     - Certificate status (active, expiry date, fingerprint)
     - Download certificate + key bundle (PEM or PKCS#12)
-    - OwnTracks connection settings (pre-filled MQTT/HTTP config with TLS)
+    - OwnTracks connection settings (pre-filled MQTT config with TLS enabled)
   - User REST endpoints:
     - `GET /api/account/certificate/` — download current certificate + key bundle
   - MQTT broker updated to accept TLS client-certificate authentication
   - OwnTracks device configuration instructions for certificate-based auth
-  - Tests for user cert access, download, MQTT TLS auth
+  - Tests for user cert access, download, MQTT TLS client auth
 
 ### Phase 7: Advanced Integration
 1. **Transition events** — Handle region enter/exit events, store transition history
@@ -198,7 +214,7 @@ my_tracks/mqtt/
 
 ## Test Coverage
 
-- 441 Python tests + 79 TypeScript tests passing
+- 466 Python tests + 79 TypeScript tests passing
 - 92% code coverage
 - All pyright checks pass
 
@@ -211,4 +227,5 @@ my_tracks/mqtt/
 
 ## Future Enhancements
 
-- **MQTT over TLS** — Add `--mqtt-tls-port` (8883) for encrypted connections (partially addressed by Phase 6 cert work)
+- **Certificate Revocation List (CRL)** — Publish CRL endpoint for external consumers; integrate with MQTT broker for real-time revocation checks
+- **ACME / Let's Encrypt** — Optional integration for publicly trusted server certificates instead of self-signed CA
