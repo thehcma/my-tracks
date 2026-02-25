@@ -385,3 +385,92 @@ class TestAdminUserAPI:
         """Test toggling admin on a nonexistent user returns 404."""
         response = admin_api_client.post('/api/admin/users/99999/toggle-admin/')
         assert_that(response.status_code, equal_to(status.HTTP_404_NOT_FOUND))
+
+    def test_hard_delete_user(
+        self, admin_api_client: APIClient, user: User
+    ) -> None:
+        """Test permanently deleting a user."""
+        user_pk = user.pk
+        response = admin_api_client.delete(f'/api/admin/users/{user_pk}/hard-delete/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response.data['detail'], contains_string('permanently deleted'))
+        assert_that(User.objects.filter(pk=user_pk).exists(), is_(False))
+
+    def test_hard_delete_self_forbidden(
+        self, admin_api_client: APIClient, admin_user: User
+    ) -> None:
+        """Test that admins cannot delete their own account."""
+        response = admin_api_client.delete(f'/api/admin/users/{admin_user.pk}/hard-delete/')
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+        assert_that(response.data['error'], contains_string('own account'))
+
+    def test_hard_delete_nonexistent_user(self, admin_api_client: APIClient) -> None:
+        """Test deleting a nonexistent user returns 404."""
+        response = admin_api_client.delete('/api/admin/users/99999/hard-delete/')
+        assert_that(response.status_code, equal_to(status.HTTP_404_NOT_FOUND))
+
+    def test_hard_delete_forbidden_for_regular_user(
+        self, auth_api_client: APIClient, admin_user: User
+    ) -> None:
+        """Test that non-admin users cannot hard-delete."""
+        response = auth_api_client.delete(f'/api/admin/users/{admin_user.pk}/hard-delete/')
+        assert_that(response.status_code, equal_to(status.HTTP_403_FORBIDDEN))
+
+    def test_set_password(
+        self, admin_api_client: APIClient, user: User
+    ) -> None:
+        """Test setting a user's password."""
+        response = admin_api_client.post(
+            f'/api/admin/users/{user.pk}/set-password/',
+            {'password': 'newSecureP@ss99'},
+            format='json',
+        )
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response.data['detail'], contains_string('updated'))
+
+        user.refresh_from_db()
+        assert_that(user.check_password('newSecureP@ss99'), is_(True))
+
+    def test_set_password_too_short(
+        self, admin_api_client: APIClient, user: User
+    ) -> None:
+        """Test setting a password that is too short."""
+        response = admin_api_client.post(
+            f'/api/admin/users/{user.pk}/set-password/',
+            {'password': 'short'},
+            format='json',
+        )
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+        assert_that(response.data['error'], contains_string('at least 8'))
+
+    def test_set_password_missing(
+        self, admin_api_client: APIClient, user: User
+    ) -> None:
+        """Test setting a password with no password field."""
+        response = admin_api_client.post(
+            f'/api/admin/users/{user.pk}/set-password/',
+            {},
+            format='json',
+        )
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+        assert_that(response.data['error'], contains_string('required'))
+
+    def test_set_password_nonexistent_user(self, admin_api_client: APIClient) -> None:
+        """Test setting password on a nonexistent user returns 404."""
+        response = admin_api_client.post(
+            '/api/admin/users/99999/set-password/',
+            {'password': 'newSecureP@ss99'},
+            format='json',
+        )
+        assert_that(response.status_code, equal_to(status.HTTP_404_NOT_FOUND))
+
+    def test_set_password_forbidden_for_regular_user(
+        self, auth_api_client: APIClient, admin_user: User
+    ) -> None:
+        """Test that non-admin users cannot set passwords."""
+        response = auth_api_client.post(
+            f'/api/admin/users/{admin_user.pk}/set-password/',
+            {'password': 'newSecureP@ss99'},
+            format='json',
+        )
+        assert_that(response.status_code, equal_to(status.HTTP_403_FORBIDDEN))

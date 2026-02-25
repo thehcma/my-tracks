@@ -173,6 +173,61 @@
             color: var(--text);
         }
 
+        /* Password modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .modal-card h3 {
+            font-size: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+            margin-top: 1.25rem;
+        }
+
+        .modal-actions .cancel-btn {
+            padding: 0.6rem 1.25rem;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .modal-actions .cancel-btn:hover {
+            background: var(--border);
+            color: var(--text);
+        }
+
         .checkbox-group {
             display: flex;
             align-items: center;
@@ -520,6 +575,12 @@
                                         {% if u.is_staff %}Remove Admin{% else %}Make Admin{% endif %}
                                     </button>
                                 </form>
+                                <button type="button" class="action-btn" title="Set password"
+                                        onclick="openPasswordModal('{{ u.pk }}', '{{ u.username }}')">Set Password</button>
+                                <form method="post" action="/api/admin/users/{{ u.pk }}/hard-delete/" style="display:inline" class="api-action"
+                                      data-method="DELETE" data-confirm="PERMANENTLY delete user '{{ u.username }}'? This will remove the user and all their data. This action cannot be undone.">
+                                    <button type="submit" class="action-btn danger" title="Permanently delete user">Delete</button>
+                                </form>
                             {% else %}
                                 <span style="color: var(--text-muted); font-size: 0.75rem;">you</span>
                             {% endif %}
@@ -643,6 +704,35 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="password-modal">
+        <div class="modal-card">
+            <h3>Set Password for <strong id="modal-username"></strong></h3>
+            <div id="modal-error" class="message error" style="display:none"></div>
+            <div class="form-group">
+                <label for="modal-password">New Password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="modal-password" required minlength="8" autocomplete="new-password">
+                    <button type="button" class="password-toggle" id="modal-password-toggle" aria-label="Show password">
+                        <svg class="eye-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        <svg class="eye-off-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                            <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="cancel-btn" onclick="closePasswordModal()">Cancel</button>
+                <button type="button" class="submit-btn" style="width:auto; padding:0.6rem 1.5rem" onclick="submitPassword()">Set Password</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.querySelectorAll('.api-action').forEach(form => {
             form.addEventListener('submit', async (e) => {
@@ -675,18 +765,82 @@
         });
     </script>
     <script>
-        document.getElementById('password-toggle').addEventListener('click', function() {
-            const input = document.getElementById('id_password');
-            const eyeIcon = this.querySelector('.eye-icon');
-            const eyeOffIcon = this.querySelector('.eye-off-icon');
-            const isHidden = input.type === 'password';
+        document.querySelectorAll('.password-toggle').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const wrapper = this.closest('.password-wrapper');
+                const input = wrapper.querySelector('input');
+                const eyeIcon = this.querySelector('.eye-icon');
+                const eyeOffIcon = this.querySelector('.eye-off-icon');
+                const isHidden = input.type === 'password';
 
-            input.type = isHidden ? 'text' : 'password';
-            eyeIcon.style.display = isHidden ? 'none' : 'block';
-            eyeOffIcon.style.display = isHidden ? 'block' : 'none';
-            this.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
-            input.focus();
+                input.type = isHidden ? 'text' : 'password';
+                eyeIcon.style.display = isHidden ? 'none' : 'block';
+                eyeOffIcon.style.display = isHidden ? 'block' : 'none';
+                this.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+                input.focus();
+            });
         });
+
+        let currentUserId = null;
+
+        function openPasswordModal(userId, username) {
+            currentUserId = userId;
+            document.getElementById('modal-username').textContent = username;
+            document.getElementById('modal-password').value = '';
+            document.getElementById('modal-error').style.display = 'none';
+            const modal = document.getElementById('password-modal');
+            modal.classList.add('active');
+            document.getElementById('modal-password').focus();
+        }
+
+        function closePasswordModal() {
+            document.getElementById('password-modal').classList.remove('active');
+            currentUserId = null;
+        }
+
+        document.getElementById('password-modal').addEventListener('click', function(e) {
+            if (e.target === this) closePasswordModal();
+        });
+
+        document.getElementById('modal-password').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') submitPassword();
+            if (e.key === 'Escape') closePasswordModal();
+        });
+
+        async function submitPassword() {
+            const password = document.getElementById('modal-password').value;
+            const errorEl = document.getElementById('modal-error');
+
+            if (!password || password.length < 8) {
+                errorEl.textContent = 'Password must be at least 8 characters.';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+            try {
+                const resp = await fetch(`/api/admin/users/${currentUserId}/set-password/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ password }),
+                });
+                if (resp.ok) {
+                    closePasswordModal();
+                    window.location.reload();
+                } else {
+                    const data = await resp.json();
+                    errorEl.textContent = data.error || 'Failed to set password.';
+                    errorEl.style.display = 'block';
+                }
+            } catch {
+                errorEl.textContent = 'Network error.';
+                errorEl.style.display = 'block';
+            }
+        }
     </script>
 </body>
 </html>
