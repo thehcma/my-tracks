@@ -15,6 +15,43 @@ from rest_framework import status
 
 
 @pytest.mark.django_db
+class TestLoginPage:
+    """Test the login page."""
+
+    def test_login_page_renders(self) -> None:
+        """Login page should render for unauthenticated users."""
+        client = Client()
+        response = client.get('/login/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Sign in'))
+
+    def test_login_page_has_password_toggle(self) -> None:
+        """Login page should contain the password visibility toggle button."""
+        client = Client()
+        response = client.get('/login/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('id="password-toggle"'))
+        assert_that(content, contains_string('aria-label="Show password"'))
+
+    def test_login_page_has_eye_icons(self) -> None:
+        """Login page should contain both eye and eye-off SVG icons."""
+        client = Client()
+        response = client.get('/login/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('id="eye-icon"'))
+        assert_that(content, contains_string('id="eye-off-icon"'))
+
+    def test_login_page_has_toggle_script(self) -> None:
+        """Login page should contain the password toggle JavaScript."""
+        client = Client()
+        response = client.get('/login/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('password-toggle'))
+        assert_that(content, contains_string("input.type"))
+
+
+@pytest.mark.django_db
 class TestWebUIViews:
     """Test the web UI view functions."""
 
