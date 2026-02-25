@@ -820,6 +820,32 @@ class TestAdminPanel:
         assert_that(content, contains_string('class="eye-icon"'))
         assert_that(content, contains_string('class="eye-off-icon"'))
 
+    def test_admin_panel_shows_delete_button(
+        self, admin_logged_in_client: Client, user: User
+    ) -> None:
+        """Admin panel should show a Delete button for other users."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('hard-delete'))
+        assert_that(content, contains_string('PERMANENTLY delete'))
+
+    def test_admin_panel_shows_set_password_button(
+        self, admin_logged_in_client: Client, user: User
+    ) -> None:
+        """Admin panel should show a Set Password button for other users."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Set Password'))
+        assert_that(content, contains_string('openPasswordModal'))
+
+    def test_admin_panel_has_password_modal(self, admin_logged_in_client: Client) -> None:
+        """Admin panel should contain the password modal."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('id="password-modal"'))
+        assert_that(content, contains_string('id="modal-password"'))
+        assert_that(content, contains_string('submitPassword'))
+
 
 @pytest.mark.django_db
 class TestAdminPanelPKI:

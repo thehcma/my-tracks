@@ -601,6 +601,8 @@ class AdminUserViewSet(viewsets.ViewSet):
     - DELETE /api/admin/users/{id}/ — deactivate a user
     - POST /api/admin/users/{id}/reactivate/ — reactivate a user
     - POST /api/admin/users/{id}/toggle-admin/ — toggle admin status
+    - DELETE /api/admin/users/{id}/hard-delete/ — permanently delete a user
+    - POST /api/admin/users/{id}/set-password/ — set a user's password
     """
 
     permission_classes = [IsAdminUser]
@@ -717,6 +719,61 @@ class AdminUserViewSet(viewsets.ViewSet):
         return Response(
             {"detail": f"User '{user.username}' is now {new_role}.",
              "is_staff": user.is_staff},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=['delete'], url_path='hard-delete')
+    def hard_delete(self, request: Request, pk: str | None = None) -> Response:
+        """Permanently delete a user and all associated data."""
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid user ID, got '{pk}' which does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if user == request.user:
+            return Response(
+                {"error": "Cannot delete your own account"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        username = user.username
+        user.delete()
+        return Response(
+            {"detail": f"User '{username}' has been permanently deleted."},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=['post'], url_path='set-password')
+    def set_password(self, request: Request, pk: str | None = None) -> Response:
+        """Set a new password for a user."""
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid user ID, got '{pk}' which does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        password: Any = request.data.get('password')
+        if not password:
+            return Response(
+                {"error": "password is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(str(password)) < 8:
+            return Response(
+                {"error": "Password must be at least 8 characters"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(str(password))
+        user.save()
+        return Response(
+            {"detail": f"Password for '{user.username}' has been updated."},
             status=status.HTTP_200_OK,
         )
 
