@@ -648,6 +648,15 @@ class TestProfilePage:
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('Member since'))
 
+    def test_profile_has_password_toggles(self, logged_in_client: Client) -> None:
+        """Profile change password form should have visibility toggles on all three fields."""
+        response = logged_in_client.get('/profile/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('password-toggle'))
+        assert_that(content, contains_string('password-wrapper'))
+        assert_that(content, contains_string('class="eye-icon"'))
+        assert_that(content, contains_string('class="eye-off-icon"'))
+
 
 @pytest.mark.django_db
 class TestSessionConfiguration:
