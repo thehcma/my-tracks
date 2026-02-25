@@ -449,6 +449,22 @@
             padding-top: 1rem;
             border-top: 1px solid var(--border);
         }
+
+        .form-group select {
+            width: 100%;
+            padding: 0.6rem 0.8rem;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
     </style>
 </head>
 <body>
@@ -622,6 +638,10 @@
                         <span class="ca-value">{{ active_ca.not_valid_after|date:"Y-m-d" }}</span>
                     </div>
                     <div class="ca-detail-row">
+                        <span class="ca-label">Key Size</span>
+                        <span class="ca-value">{{ active_ca.key_size }}-bit RSA</span>
+                    </div>
+                    <div class="ca-detail-row">
                         <span class="ca-label">Created</span>
                         <span class="ca-value">{{ active_ca.created_at|date:"Y-m-d H:i" }}</span>
                     </div>
@@ -653,6 +673,16 @@
                             <input type="text" name="ca_validity_days" id="id_ca_validity_days" value="3650" required autocomplete="off">
                         </div>
                     </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="id_ca_key_size">Key Size (bits)</label>
+                            <select name="ca_key_size" id="id_ca_key_size">
+                                <option value="2048">2048</option>
+                                <option value="3072">3072</option>
+                                <option value="4096" selected>4096</option>
+                            </select>
+                        </div>
+                    </div>
                     <button type="submit" class="submit-btn" {% if active_ca %}onclick="return confirm('This will deactivate the current active CA:\n\n  {{ active_ca.common_name }} (expires {{ active_ca.not_valid_after|date:"Y-m-d" }})\n\nAny certificates issued by it will remain valid, but no new ones can be issued from it.\n\nContinue?')"{% endif %}>Generate CA</button>
                 </form>
             </div>
@@ -665,6 +695,7 @@
                         <tr>
                             <th>Common Name</th>
                             <th>Status</th>
+                            <th>Key Size</th>
                             <th>Expires</th>
                             <th>Created</th>
                             <th>Actions</th>
@@ -681,6 +712,7 @@
                                     <span class="status-pill inactive">inactive</span>
                                 {% endif %}
                             </td>
+                            <td>{{ ca.key_size }}-bit</td>
                             <td>{{ ca.not_valid_after|date:"Y-m-d" }}</td>
                             <td>{{ ca.created_at|date:"Y-m-d H:i" }}</td>
                             <td>

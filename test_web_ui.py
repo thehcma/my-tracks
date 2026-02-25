@@ -874,12 +874,14 @@ class TestAdminPanelPKI:
         assert_that(content, contains_string('No active CA certificate'))
 
     def test_admin_panel_shows_generate_ca_form(self, admin_logged_in_client: Client) -> None:
-        """Admin panel should contain the CA generation form."""
+        """Admin panel should contain the CA generation form with key size."""
         response = admin_logged_in_client.get('/admin-panel/')
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('Generate New CA'))
         assert_that(content, contains_string('ca_common_name'))
         assert_that(content, contains_string('ca_validity_days'))
+        assert_that(content, contains_string('ca_key_size'))
+        assert_that(content, contains_string('Key Size'))
 
     def test_generate_ca_creates_active_ca(self, admin_logged_in_client: Client) -> None:
         """Submitting the CA form should create a new active CA."""
@@ -1066,3 +1068,69 @@ class TestAdminPanelPKI:
         response = admin_logged_in_client.get('/admin-panel/')
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('Expunge'))
+
+    def test_generate_ca_with_key_size(self, admin_logged_in_client: Client) -> None:
+        """Generating CA with explicit key size should store it."""
+        from my_tracks.models import CertificateAuthority
+
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Small Key CA',
+            'ca_validity_days': '365',
+            'ca_key_size': '2048',
+        })
+
+        ca = CertificateAuthority.objects.filter(is_active=True).first()
+        assert_that(ca, is_(not_none()))
+        assert_that(ca.key_size, equal_to(2048))  # type: ignore[union-attr]
+
+    def test_generate_ca_default_key_size(self, admin_logged_in_client: Client) -> None:
+        """Generating CA without key size should default to 4096."""
+        from my_tracks.models import CertificateAuthority
+
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Default Key CA',
+            'ca_validity_days': '365',
+        })
+
+        ca = CertificateAuthority.objects.filter(is_active=True).first()
+        assert_that(ca, is_(not_none()))
+        assert_that(ca.key_size, equal_to(4096))  # type: ignore[union-attr]
+
+    def test_generate_ca_invalid_key_size(self, admin_logged_in_client: Client) -> None:
+        """Invalid key size should show an error."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Bad Key CA',
+            'ca_validity_days': '365',
+            'ca_key_size': '1024',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Key size must be one of'))
+
+    def test_active_ca_shows_key_size(self, admin_logged_in_client: Client) -> None:
+        """Active CA details should display the key size."""
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Display Key CA',
+            'ca_validity_days': '365',
+            'ca_key_size': '3072',
+        })
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('3072-bit RSA'))
+
+    def test_ca_history_shows_key_size(self, admin_logged_in_client: Client) -> None:
+        """CA history table should show key size column."""
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'History Key CA',
+            'ca_validity_days': '365',
+            'ca_key_size': '2048',
+        })
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('2048-bit'))
