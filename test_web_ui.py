@@ -773,3 +773,215 @@ class TestAdminPanel:
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('Back to Map'))
         assert_that(content, contains_string('href="/"'))
+
+
+@pytest.mark.django_db
+class TestAdminPanelPKI:
+    """Test the PKI / Certificate Authority section of the admin panel."""
+
+    def test_admin_panel_shows_pki_section(self, admin_logged_in_client: Client) -> None:
+        """Admin panel should contain the PKI section header."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('PKI'))
+        assert_that(content, contains_string('Certificate Authority'))
+
+    def test_admin_panel_shows_no_active_ca_message(self, admin_logged_in_client: Client) -> None:
+        """When no CA exists, shows a prompt to generate one."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('No active CA certificate'))
+
+    def test_admin_panel_shows_generate_ca_form(self, admin_logged_in_client: Client) -> None:
+        """Admin panel should contain the CA generation form."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Generate New CA'))
+        assert_that(content, contains_string('ca_common_name'))
+        assert_that(content, contains_string('ca_validity_days'))
+
+    def test_generate_ca_creates_active_ca(self, admin_logged_in_client: Client) -> None:
+        """Submitting the CA form should create a new active CA."""
+        from my_tracks.models import CertificateAuthority
+
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Test CA',
+            'ca_validity_days': '365',
+        })
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('generated successfully'))
+
+        ca = CertificateAuthority.objects.filter(is_active=True).first()
+        assert_that(ca, is_(not_none()))
+        assert_that(ca.common_name, equal_to('Test CA'))  # type: ignore[union-attr]
+
+    def test_generate_ca_shows_active_ca_details(self, admin_logged_in_client: Client) -> None:
+        """After generating, the active CA details should appear on the page."""
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'My Test CA',
+            'ca_validity_days': '3650',
+        })
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('My Test CA'))
+        assert_that(content, contains_string('Fingerprint'))
+        assert_that(content, contains_string('Download CA Cert'))
+
+    def test_generate_ca_deactivates_previous(self, admin_logged_in_client: Client) -> None:
+        """Generating a new CA should deactivate the previous one."""
+        from my_tracks.models import CertificateAuthority
+
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'First CA',
+            'ca_validity_days': '365',
+        })
+        first_ca = CertificateAuthority.objects.get(common_name='First CA')
+        assert_that(first_ca.is_active, is_(True))
+
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Second CA',
+            'ca_validity_days': '365',
+        })
+
+        first_ca.refresh_from_db()
+        assert_that(first_ca.is_active, is_(False))
+
+        second_ca = CertificateAuthority.objects.get(common_name='Second CA')
+        assert_that(second_ca.is_active, is_(True))
+
+    def test_generate_ca_invalid_validity(self, admin_logged_in_client: Client) -> None:
+        """Invalid validity days should show an error."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Bad CA',
+            'ca_validity_days': 'notanumber',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('must be a number'))
+
+    def test_generate_ca_out_of_range_validity(self, admin_logged_in_client: Client) -> None:
+        """Validity days outside 1-36500 range should show an error."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Range CA',
+            'ca_validity_days': '0',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('between 1 and 36500'))
+
+    def test_generate_ca_empty_common_name(self, admin_logged_in_client: Client) -> None:
+        """Empty common name should show an error."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': '',
+            'ca_validity_days': '365',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Common Name is required'))
+
+    def test_ca_history_table_shown(self, admin_logged_in_client: Client) -> None:
+        """After generating CAs, the history table should appear."""
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'History CA',
+            'ca_validity_days': '365',
+        })
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('CA History'))
+        assert_that(content, contains_string('History CA'))
+
+    def test_ca_download_link_present(self, admin_logged_in_client: Client) -> None:
+        """Active CA should have a download link."""
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Download CA',
+            'ca_validity_days': '365',
+        })
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('/api/admin/pki/ca/'))
+        assert_that(content, contains_string('/download/'))
+
+    def test_expunge_inactive_ca(self, admin_logged_in_client: Client) -> None:
+        """Expunging an inactive CA should permanently delete it."""
+        from my_tracks.models import CertificateAuthority
+
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Old CA',
+            'ca_validity_days': '365',
+        })
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'New CA',
+            'ca_validity_days': '365',
+        })
+
+        old_ca = CertificateAuthority.objects.get(common_name='Old CA')
+        assert_that(old_ca.is_active, is_(False))
+
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'expunge_ca',
+            'ca_id': str(old_ca.pk),
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('permanently deleted'))
+        assert_that(
+            CertificateAuthority.objects.filter(pk=old_ca.pk).exists(), is_(False)
+        )
+
+    def test_expunge_active_ca_rejected(self, admin_logged_in_client: Client) -> None:
+        """Expunging an active CA should be rejected."""
+        from my_tracks.models import CertificateAuthority
+
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Active CA',
+            'ca_validity_days': '365',
+        })
+        active_ca = CertificateAuthority.objects.get(common_name='Active CA')
+
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'expunge_ca',
+            'ca_id': str(active_ca.pk),
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Cannot expunge an active CA'))
+        assert_that(
+            CertificateAuthority.objects.filter(pk=active_ca.pk).exists(), is_(True)
+        )
+
+    def test_expunge_nonexistent_ca(self, admin_logged_in_client: Client) -> None:
+        """Expunging a CA that doesn't exist should show an error."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'expunge_ca',
+            'ca_id': '99999',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('not found'))
+
+    def test_expunge_button_shown_for_inactive_ca(self, admin_logged_in_client: Client) -> None:
+        """Expunge button should appear in history table for inactive CAs."""
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'First',
+            'ca_validity_days': '365',
+        })
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Second',
+            'ca_validity_days': '365',
+        })
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Expunge'))

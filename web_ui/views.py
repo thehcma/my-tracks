@@ -2,6 +2,7 @@
 
 import logging
 import socket
+from datetime import timedelta
 
 import netifaces
 from django.conf import settings
@@ -14,7 +15,11 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 
 from config.runtime import get_actual_mqtt_port, get_mqtt_port
-from my_tracks.models import Location
+from my_tracks.models import CertificateAuthority, Location
+from my_tracks.pki import encrypt_private_key as pki_encrypt_private_key
+from my_tracks.pki import (generate_ca_certificate, get_certificate_expiry,
+                           get_certificate_fingerprint,
+                           get_certificate_subject)
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +289,60 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
                 except Exception as e:
                     context['create_error'] = str(e)
 
+        if form_type == 'generate_ca':
+            ca_cn_post = request.POST.get('ca_common_name')
+            ca_cn = str(ca_cn_post).strip() if ca_cn_post is not None else 'My Tracks CA'
+            ca_validity_raw = str(request.POST.get('ca_validity_days') or '3650')
+
+            if not ca_cn:
+                context['ca_error'] = 'Common Name is required.'
+            else:
+                try:
+                    validity_days = int(ca_validity_raw)
+                    if validity_days < 1 or validity_days > 36500:
+                        context['ca_error'] = 'Validity must be between 1 and 36500 days.'
+                    else:
+                        cert_pem, key_pem = generate_ca_certificate(
+                            common_name=ca_cn,
+                            validity_days=validity_days,
+                        )
+                        encrypted_key = pki_encrypt_private_key(key_pem)
+
+                        CertificateAuthority.objects.filter(is_active=True).update(is_active=False)
+
+                        CertificateAuthority.objects.create(
+                            certificate_pem=cert_pem.decode(),
+                            encrypted_private_key=encrypted_key,
+                            common_name=get_certificate_subject(cert_pem),
+                            fingerprint=get_certificate_fingerprint(cert_pem),
+                            not_valid_before=get_certificate_expiry(cert_pem) - timedelta(days=validity_days),
+                            not_valid_after=get_certificate_expiry(cert_pem),
+                            is_active=True,
+                        )
+                        context['ca_success'] = f"CA '{ca_cn}' generated successfully."
+                except ValueError:
+                    context['ca_error'] = 'Validity days must be a number.'
+                except Exception as e:
+                    context['ca_error'] = str(e)
+
+        if form_type == 'expunge_ca':
+            ca_id = request.POST.get('ca_id')
+            try:
+                ca = CertificateAuthority.objects.get(pk=ca_id)
+                if ca.is_active:
+                    context['ca_error'] = 'Cannot expunge an active CA. Deactivate it first.'
+                else:
+                    ca_name = ca.common_name
+                    ca.delete()
+                    context['ca_success'] = f"CA '{ca_name}' permanently deleted."
+            except CertificateAuthority.DoesNotExist:
+                context['ca_error'] = 'Certificate Authority not found.'
+
     users = User.objects.all().order_by('username')
     context['users'] = users
+
+    active_ca = CertificateAuthority.objects.filter(is_active=True).first()
+    context['active_ca'] = active_ca
+    context['ca_history'] = list(CertificateAuthority.objects.all()[:10])
+
     return render(request, 'web_ui/admin_panel.html', context)
