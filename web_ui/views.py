@@ -15,11 +15,13 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 
 from config.runtime import get_actual_mqtt_port, get_mqtt_port
-from my_tracks.models import CertificateAuthority, Location
+from my_tracks.models import CertificateAuthority, Location, ServerCertificate
 from my_tracks.pki import ALLOWED_KEY_SIZES
+from my_tracks.pki import decrypt_private_key as pki_decrypt_private_key
 from my_tracks.pki import encrypt_private_key as pki_encrypt_private_key
-from my_tracks.pki import (generate_ca_certificate, get_certificate_expiry,
-                           get_certificate_fingerprint,
+from my_tracks.pki import (generate_ca_certificate,
+                           generate_server_certificate, get_certificate_expiry,
+                           get_certificate_fingerprint, get_certificate_sans,
                            get_certificate_subject)
 
 logger = logging.getLogger(__name__)
@@ -346,11 +348,91 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
             except CertificateAuthority.DoesNotExist:
                 context['ca_error'] = 'Certificate Authority not found.'
 
+        if form_type == 'generate_server_cert':
+            sc_cn_post = request.POST.get('sc_common_name')
+            sc_cn = str(sc_cn_post).strip() if sc_cn_post is not None else ''
+            sc_validity_raw = str(request.POST.get('sc_validity_days') or '365')
+            sc_key_size_raw = str(request.POST.get('sc_key_size') or '4096')
+            sc_sans_raw = str(request.POST.get('sc_san_entries') or '')
+            sc_san_list = [s.strip() for s in sc_sans_raw.split(',') if s.strip()]
+
+            active_ca_obj = CertificateAuthority.objects.filter(is_active=True).first()
+
+            if not active_ca_obj:
+                context['sc_error'] = 'No active CA certificate. Generate a CA first.'
+            elif not sc_cn:
+                context['sc_error'] = 'Common Name is required.'
+            elif not sc_san_list:
+                context['sc_error'] = 'At least one SAN entry is required.'
+            else:
+                try:
+                    validity_days = int(sc_validity_raw)
+                    key_size = int(sc_key_size_raw)
+                    if validity_days < 1 or validity_days > 36500:
+                        context['sc_error'] = 'Validity must be between 1 and 36500 days.'
+                    elif key_size not in ALLOWED_KEY_SIZES:
+                        context['sc_error'] = f'Key size must be one of {ALLOWED_KEY_SIZES}.'
+                    else:
+                        ca_key_pem = pki_decrypt_private_key(
+                            bytes(active_ca_obj.encrypted_private_key)
+                        )
+                        cert_pem, srv_key_pem = generate_server_certificate(
+                            ca_cert_pem=active_ca_obj.certificate_pem.encode(),
+                            ca_key_pem=ca_key_pem,
+                            common_name=sc_cn,
+                            san_entries=sc_san_list,
+                            validity_days=validity_days,
+                            key_size=key_size,
+                        )
+                        encrypted_key = pki_encrypt_private_key(srv_key_pem)
+
+                        ServerCertificate.objects.filter(is_active=True).update(is_active=False)
+
+                        ServerCertificate.objects.create(
+                            issuing_ca=active_ca_obj,
+                            certificate_pem=cert_pem.decode(),
+                            encrypted_private_key=encrypted_key,
+                            common_name=get_certificate_subject(cert_pem),
+                            fingerprint=get_certificate_fingerprint(cert_pem),
+                            san_entries=get_certificate_sans(cert_pem),
+                            key_size=key_size,
+                            not_valid_before=get_certificate_expiry(cert_pem) - timedelta(days=validity_days),
+                            not_valid_after=get_certificate_expiry(cert_pem),
+                            is_active=True,
+                        )
+                        context['sc_success'] = f"Server certificate '{sc_cn}' generated successfully."
+                except ValueError:
+                    context['sc_error'] = 'Validity days and key size must be a number.'
+                except Exception as e:
+                    context['sc_error'] = str(e)
+
+        if form_type == 'expunge_server_cert':
+            sc_id = request.POST.get('sc_id')
+            try:
+                sc = ServerCertificate.objects.get(pk=sc_id)
+                if sc.is_active:
+                    context['sc_error'] = 'Cannot expunge an active server certificate. Deactivate it first.'
+                else:
+                    sc_name = sc.common_name
+                    sc.delete()
+                    context['sc_success'] = f"Server certificate '{sc_name}' permanently deleted."
+            except ServerCertificate.DoesNotExist:
+                context['sc_error'] = 'Server certificate not found.'
+
     users = User.objects.all().order_by('username')
     context['users'] = users
 
     active_ca = CertificateAuthority.objects.filter(is_active=True).first()
     context['active_ca'] = active_ca
     context['ca_history'] = list(CertificateAuthority.objects.all()[:10])
+
+    active_sc = ServerCertificate.objects.filter(is_active=True).first()
+    context['active_sc'] = active_sc
+    context['sc_history'] = list(ServerCertificate.objects.all()[:10])
+
+    ips = get_all_local_ips()
+    hostname = socket.gethostname()
+    context['default_sans'] = ', '.join(ips + [hostname]) if ips else hostname
+    context['hostname'] = hostname
 
     return render(request, 'web_ui/admin_panel.html', context)
