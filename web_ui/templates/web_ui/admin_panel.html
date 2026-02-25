@@ -292,6 +292,82 @@
             color: var(--text-muted);
             margin-top: 0.75rem;
         }
+
+        /* PKI / CA styles */
+        .ca-status {
+            background: rgba(78, 154, 241, 0.06);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .ca-status-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+        }
+
+        .ca-details {
+            display: grid;
+            gap: 0.4rem;
+            margin-bottom: 1rem;
+        }
+
+        .ca-detail-row {
+            display: grid;
+            grid-template-columns: 110px 1fr;
+            gap: 0.75rem;
+            font-size: 0.825rem;
+        }
+
+        .ca-label {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .ca-value {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            word-break: break-all;
+        }
+
+        .ca-actions {
+            display: flex;
+            gap: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .ca-actions a.action-btn {
+            text-decoration: none;
+        }
+
+        .ca-no-active {
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            margin-bottom: 1.5rem;
+            font-style: italic;
+        }
+
+        .ca-generate-section {
+            padding-top: 1rem;
+        }
+
+        .ca-generate-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .ca-history {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
     </style>
 </head>
 <body>
@@ -413,6 +489,117 @@
                 </tbody>
             </table>
             <p class="user-count">{{ users|length }} user{{ users|length|pluralize }}</p>
+        </div>
+
+        <div class="admin-card">
+            <h3 class="section-title">PKI — Certificate Authority</h3>
+
+            {% if ca_success %}
+            <div class="message success">{{ ca_success }}</div>
+            {% endif %}
+            {% if ca_error %}
+            <div class="message error">{{ ca_error }}</div>
+            {% endif %}
+
+            {% if active_ca %}
+            <div class="ca-status">
+                <div class="ca-status-header">
+                    <span class="status-pill active">active</span>
+                    <strong>{{ active_ca.common_name }}</strong>
+                </div>
+                <div class="ca-details">
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Fingerprint</span>
+                        <code class="ca-value">{{ active_ca.fingerprint }}</code>
+                    </div>
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Valid from</span>
+                        <span class="ca-value">{{ active_ca.not_valid_before|date:"Y-m-d" }}</span>
+                    </div>
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Expires</span>
+                        <span class="ca-value">{{ active_ca.not_valid_after|date:"Y-m-d" }}</span>
+                    </div>
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Created</span>
+                        <span class="ca-value">{{ active_ca.created_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                </div>
+                <div class="ca-actions">
+                    <a href="/api/admin/pki/ca/{{ active_ca.pk }}/download/" class="action-btn" title="Download CA certificate PEM">Download CA Cert</a>
+                    <form method="post" action="/api/admin/pki/ca/{{ active_ca.pk }}/" style="display:inline" class="api-action"
+                          data-method="DELETE" data-confirm="Deactivate CA '{{ active_ca.common_name }}'? This will not revoke issued certificates.">
+                        <button type="submit" class="action-btn danger" title="Deactivate this CA">Deactivate</button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <p class="ca-no-active">No active CA certificate. Generate one below.</p>
+            {% endif %}
+
+            <div class="ca-generate-section">
+                <h4 class="ca-generate-title">Generate New CA</h4>
+                <form method="post" action="{% url 'web_ui:admin_panel' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="generate_ca">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="id_ca_common_name">Common Name</label>
+                            <input type="text" name="ca_common_name" id="id_ca_common_name" value="My Tracks CA" required autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="id_ca_validity_days">Validity (days)</label>
+                            <input type="text" name="ca_validity_days" id="id_ca_validity_days" value="3650" required autocomplete="off">
+                        </div>
+                    </div>
+                    <button type="submit" class="submit-btn" {% if active_ca %}onclick="return confirm('This will deactivate the current active CA:\n\n  {{ active_ca.common_name }} (expires {{ active_ca.not_valid_after|date:"Y-m-d" }})\n\nAny certificates issued by it will remain valid, but no new ones can be issued from it.\n\nContinue?')"{% endif %}>Generate CA</button>
+                </form>
+            </div>
+
+            {% if ca_history %}
+            <div class="ca-history">
+                <h4 class="ca-generate-title">CA History</h4>
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>Common Name</th>
+                            <th>Status</th>
+                            <th>Expires</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ca in ca_history %}
+                        <tr class="{% if not ca.is_active %}inactive{% endif %}">
+                            <td>{{ ca.common_name }}</td>
+                            <td>
+                                {% if ca.is_active %}
+                                    <span class="status-pill active">active</span>
+                                {% else %}
+                                    <span class="status-pill inactive">inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ ca.not_valid_after|date:"Y-m-d" }}</td>
+                            <td>{{ ca.created_at|date:"Y-m-d H:i" }}</td>
+                            <td>
+                                <a href="/api/admin/pki/ca/{{ ca.pk }}/download/" class="action-btn" title="Download certificate PEM">Download</a>
+                                {% if not ca.is_active %}
+                                <form method="post" action="{% url 'web_ui:admin_panel' %}" style="display:inline"
+                                      onsubmit="return confirm('Permanently delete CA \'{{ ca.common_name }}\'?\n\nThis action cannot be undone.')">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="form_type" value="expunge_ca">
+                                    <input type="hidden" name="ca_id" value="{{ ca.pk }}">
+                                    <button type="submit" class="action-btn danger" title="Permanently delete this CA">Expunge</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
         </div>
     </div>
 
