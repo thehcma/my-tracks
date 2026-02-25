@@ -24,15 +24,16 @@ from rest_framework.response import Response
 from .apps import get_mqtt_broker, get_mqtt_event_loop
 from .auth import CommandApiKeyAuthentication, get_command_api_key
 from .models import (CertificateAuthority, Device, Location, OwnTracksMessage,
-                     UserProfile)
+                     ServerCertificate, UserProfile)
 from .mqtt.commands import Command, CommandPublisher
 from .pki import (ALLOWED_KEY_SIZES, decrypt_private_key, encrypt_private_key,
-                  generate_ca_certificate, get_certificate_expiry,
-                  get_certificate_fingerprint, get_certificate_subject)
+                  generate_ca_certificate, generate_server_certificate,
+                  get_certificate_expiry, get_certificate_fingerprint,
+                  get_certificate_sans, get_certificate_subject)
 from .serializers import (CertificateAuthoritySerializer,
                           ChangePasswordSerializer, DeviceSerializer,
-                          LocationSerializer, UserProfileSerializer,
-                          UserSerializer)
+                          LocationSerializer, ServerCertificateSerializer,
+                          UserProfileSerializer, UserSerializer)
 from .utils import extract_device_id
 
 logger = logging.getLogger(__name__)
@@ -914,4 +915,195 @@ class CertificateAuthorityViewSet(viewsets.ViewSet):
         )
         http_response['Content-Disposition'] = f'attachment; filename="{ca.common_name}.pem"'
         return http_response
+
+
+class ServerCertificateViewSet(viewsets.ViewSet):
+    """
+    Admin-only server certificate management for MQTT TLS.
+
+    Endpoints:
+    - GET /api/admin/pki/server-cert/ — list all server certificates
+    - POST /api/admin/pki/server-cert/ — generate a new server certificate
+    - DELETE /api/admin/pki/server-cert/{id}/ — deactivate a server certificate
+    - GET /api/admin/pki/server-cert/active/ — get the active server certificate
+    - GET /api/admin/pki/server-cert/{id}/download/ — download server cert PEM
+    - DELETE /api/admin/pki/server-cert/{id}/expunge/ — permanently delete inactive cert
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def list(self, request: Request) -> Response:
+        """List all server certificates, most recent first."""
+        certs = ServerCertificate.objects.all()
+        serializer = ServerCertificateSerializer(certs, many=True)
+        return Response(serializer.data)
+
+    def create(self, request: Request) -> Response:
+        """Generate a new server certificate signed by the active CA."""
+        active_ca = CertificateAuthority.objects.filter(is_active=True).first()
+        if active_ca is None:
+            return Response(
+                {"error": "No active CA certificate. Generate a CA first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        common_name: Any = request.data.get('common_name', '')
+        if not isinstance(common_name, str) or not common_name.strip():
+            return Response(
+                {"error": "Expected non-empty string for common_name"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        common_name = common_name.strip()
+
+        validity_days_raw: Any = request.data.get('validity_days', 365)
+        try:
+            validity_days = int(validity_days_raw)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": f"Expected integer for validity_days, got '{validity_days_raw}'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if validity_days < 1 or validity_days > 36500:
+            return Response(
+                {"error": f"Expected validity_days between 1 and 36500, got {validity_days}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        key_size_raw: Any = request.data.get('key_size', 4096)
+        try:
+            key_size = int(key_size_raw)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": f"Expected integer for key_size, got '{key_size_raw}'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if key_size not in ALLOWED_KEY_SIZES:
+            return Response(
+                {"error": f"Expected key_size in {ALLOWED_KEY_SIZES}, got {key_size}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        san_entries: Any = request.data.get('san_entries', [])
+        if not isinstance(san_entries, list):
+            return Response(
+                {"error": "Expected list for san_entries"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        san_list = [str(s).strip() for s in san_entries if str(s).strip()]
+        if not san_list:
+            return Response(
+                {"error": "Expected at least one SAN entry (IP or hostname)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ca_key_pem = decrypt_private_key(bytes(active_ca.encrypted_private_key))
+
+        cert_pem, server_key_pem = generate_server_certificate(
+            ca_cert_pem=active_ca.certificate_pem.encode(),
+            ca_key_pem=ca_key_pem,
+            common_name=common_name,
+            san_entries=san_list,
+            validity_days=validity_days,
+            key_size=key_size,
+        )
+
+        encrypted_key = encrypt_private_key(server_key_pem)
+
+        ServerCertificate.objects.filter(is_active=True).update(is_active=False)
+
+        server_cert = ServerCertificate.objects.create(
+            issuing_ca=active_ca,
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypted_key,
+            common_name=get_certificate_subject(cert_pem),
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            san_entries=get_certificate_sans(cert_pem),
+            key_size=key_size,
+            not_valid_before=get_certificate_expiry(cert_pem) - timedelta(days=validity_days),
+            not_valid_after=get_certificate_expiry(cert_pem),
+            is_active=True,
+        )
+
+        serializer = ServerCertificateSerializer(server_cert)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request: Request, pk: str | None = None) -> Response:
+        """Deactivate a server certificate."""
+        try:
+            cert = ServerCertificate.objects.get(pk=pk)
+        except ServerCertificate.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid server cert ID, got '{pk}' which does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not cert.is_active:
+            return Response(
+                {"error": f"Server cert '{cert.common_name}' is already inactive"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cert.is_active = False
+        cert.save()
+        return Response(
+            {"detail": f"Server cert '{cert.common_name}' has been deactivated."},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=['get'], url_path='active')
+    def active(self, request: Request) -> Response:
+        """Get the currently active server certificate."""
+        cert = ServerCertificate.objects.filter(is_active=True).first()
+        if cert is None:
+            return Response(
+                {"error": "No active server certificate found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = ServerCertificateSerializer(cert)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='download')
+    def download(self, request: Request, pk: str | None = None) -> DjangoHttpResponse | Response:
+        """Download the server certificate PEM file."""
+        try:
+            cert = ServerCertificate.objects.get(pk=pk)
+        except ServerCertificate.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid server cert ID, got '{pk}' which does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        http_response = DjangoHttpResponse(
+            cert.certificate_pem,
+            content_type='application/x-pem-file',
+        )
+        http_response['Content-Disposition'] = f'attachment; filename="{cert.common_name}-server.pem"'
+        return http_response
+
+    @action(detail=True, methods=['delete'], url_path='expunge')
+    def expunge(self, request: Request, pk: str | None = None) -> Response:
+        """Permanently delete an inactive server certificate."""
+        try:
+            cert = ServerCertificate.objects.get(pk=pk)
+        except ServerCertificate.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid server cert ID, got '{pk}' which does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if cert.is_active:
+            return Response(
+                {"error": "Cannot expunge an active server certificate. Deactivate it first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cert_name = cert.common_name
+        cert.delete()
+        return Response(
+            {"detail": f"Server cert '{cert_name}' permanently deleted."},
+            status=status.HTTP_200_OK,
+        )
 

@@ -270,6 +270,69 @@ class CertificateAuthority(models.Model):
         return f"{self.common_name}{active}"
 
 
+class ServerCertificate(models.Model):
+    """
+    Server certificate for MQTT TLS, signed by an active CA.
+
+    Only one server certificate may be active at a time
+    (enforced by the is_active singleton pattern with history).
+    Private keys are stored encrypted at rest using Fernet derived from SECRET_KEY.
+    """
+
+    issuing_ca = models.ForeignKey(
+        CertificateAuthority,
+        on_delete=models.CASCADE,
+        related_name='server_certificates',
+        help_text="The CA that signed this server certificate"
+    )
+    certificate_pem = models.TextField(
+        help_text="Server certificate in PEM format"
+    )
+    encrypted_private_key = models.BinaryField(
+        help_text="Server private key encrypted at rest (Fernet)"
+    )
+    common_name = models.CharField(
+        max_length=200,
+        help_text="Subject Common Name of the server certificate"
+    )
+    fingerprint = models.CharField(
+        max_length=100,
+        help_text="SHA-256 fingerprint of the server certificate"
+    )
+    san_entries = models.JSONField(
+        default=list,
+        help_text="Subject Alternative Names (IP addresses and DNS names)"
+    )
+    key_size = models.IntegerField(
+        default=4096,  # type: ignore[reportArgumentType]  # django-stubs issue
+        help_text="RSA key size in bits (2048, 3072, or 4096)"
+    )
+    not_valid_before = models.DateTimeField(
+        help_text="Certificate validity start"
+    )
+    not_valid_after = models.DateTimeField(
+        help_text="Certificate validity end"
+    )
+    is_active = models.BooleanField(
+        default=True,  # type: ignore[reportArgumentType]  # django-stubs issue
+        help_text="Whether this is the current active server certificate"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this server certificate was generated"
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Server Certificate'
+        verbose_name_plural = 'Server Certificates'
+
+    def __str__(self) -> str:
+        """Return string representation of the server certificate."""
+        active = " (active)" if self.is_active else ""
+        return f"{self.common_name}{active}"
+
+
 class UserProfile(models.Model):
     """
     Extended profile for users.
