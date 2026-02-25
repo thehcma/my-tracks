@@ -5,12 +5,13 @@ This module provides REST API endpoints for receiving location data
 from OwnTracks clients and querying stored location history.
 """
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.contrib.auth.models import User
+from django.http import HttpResponse as DjangoHttpResponse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -22,9 +23,14 @@ from rest_framework.response import Response
 
 from .apps import get_mqtt_broker, get_mqtt_event_loop
 from .auth import CommandApiKeyAuthentication, get_command_api_key
-from .models import Device, Location, OwnTracksMessage, UserProfile
+from .models import (CertificateAuthority, Device, Location, OwnTracksMessage,
+                     UserProfile)
 from .mqtt.commands import Command, CommandPublisher
-from .serializers import (ChangePasswordSerializer, DeviceSerializer,
+from .pki import (decrypt_private_key, encrypt_private_key,
+                  generate_ca_certificate, get_certificate_expiry,
+                  get_certificate_fingerprint, get_certificate_subject)
+from .serializers import (CertificateAuthoritySerializer,
+                          ChangePasswordSerializer, DeviceSerializer,
                           LocationSerializer, UserProfileSerializer,
                           UserSerializer)
 from .utils import extract_device_id
@@ -713,4 +719,125 @@ class AdminUserViewSet(viewsets.ViewSet):
              "is_staff": user.is_staff},
             status=status.HTTP_200_OK,
         )
+
+
+class CertificateAuthorityViewSet(viewsets.ViewSet):
+    """
+    Admin-only CA certificate management.
+
+    Endpoints:
+    - GET /api/admin/pki/ca/ — retrieve the active CA certificate (public part)
+    - POST /api/admin/pki/ca/ — generate a new CA certificate
+    - DELETE /api/admin/pki/ca/{id}/ — revoke (deactivate) a CA
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def list(self, request: Request) -> Response:
+        """Retrieve CA certificates, most recent first."""
+        cas = CertificateAuthority.objects.all()
+        serializer = CertificateAuthoritySerializer(cas, many=True)
+        return Response(serializer.data)
+
+    def create(self, request: Request) -> Response:
+        """Generate a new self-signed CA certificate."""
+        common_name: Any = request.data.get('common_name', 'My Tracks CA')
+        validity_days_raw: Any = request.data.get('validity_days', 3650)
+
+        if not isinstance(common_name, str) or not common_name.strip():
+            return Response(
+                {"error": "Expected non-empty string for common_name"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        common_name = common_name.strip()
+
+        try:
+            validity_days = int(validity_days_raw)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": f"Expected integer for validity_days, got '{validity_days_raw}'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if validity_days < 1 or validity_days > 36500:
+            return Response(
+                {"error": f"Expected validity_days between 1 and 36500, got {validity_days}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cert_pem, key_pem = generate_ca_certificate(
+            common_name=common_name,
+            validity_days=validity_days,
+        )
+
+        encrypted_key = encrypt_private_key(key_pem)
+
+        CertificateAuthority.objects.filter(is_active=True).update(is_active=False)
+
+        ca = CertificateAuthority.objects.create(
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypted_key,
+            common_name=get_certificate_subject(cert_pem),
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            not_valid_before=get_certificate_expiry(cert_pem) - timedelta(days=validity_days),
+            not_valid_after=get_certificate_expiry(cert_pem),
+            is_active=True,
+        )
+
+        serializer = CertificateAuthoritySerializer(ca)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request: Request, pk: str | None = None) -> Response:
+        """Revoke (deactivate) a CA certificate."""
+        try:
+            ca = CertificateAuthority.objects.get(pk=pk)
+        except CertificateAuthority.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid CA ID, got '{pk}' which does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not ca.is_active:
+            return Response(
+                {"error": f"CA '{ca.common_name}' is already inactive"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ca.is_active = False
+        ca.save()
+
+        return Response(
+            {"detail": f"CA '{ca.common_name}' has been deactivated."},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=False, methods=['get'], url_path='active')
+    def active(self, request: Request) -> Response:
+        """Retrieve the currently active CA certificate."""
+        ca = CertificateAuthority.objects.filter(is_active=True).first()
+        if ca is None:
+            return Response(
+                {"error": "No active CA certificate found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = CertificateAuthoritySerializer(ca)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='download')
+    def download(self, request: Request, pk: str | None = None) -> DjangoHttpResponse | Response:
+        """Download the CA certificate PEM file."""
+        try:
+            ca = CertificateAuthority.objects.get(pk=pk)
+        except CertificateAuthority.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid CA ID, got '{pk}' which does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        http_response = DjangoHttpResponse(
+            ca.certificate_pem,
+            content_type='application/x-pem-file',
+        )
+        http_response['Content-Disposition'] = f'attachment; filename="{ca.common_name}.pem"'
+        return http_response
 

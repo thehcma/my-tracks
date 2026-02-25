@@ -218,6 +218,54 @@ class OwnTracksMessage(models.Model):
         return f"{device_str} - {self.message_type} at {self.received_at}"
 
 
+class CertificateAuthority(models.Model):
+    """
+    Self-signed Certificate Authority for issuing server and client certificates.
+
+    Only one CA may be active at a time (enforced by the is_active singleton pattern).
+    Private keys are stored encrypted at rest using Fernet derived from SECRET_KEY.
+    """
+
+    certificate_pem = models.TextField(
+        help_text="CA certificate in PEM format"
+    )
+    encrypted_private_key = models.BinaryField(
+        help_text="CA private key encrypted at rest (Fernet)"
+    )
+    common_name = models.CharField(
+        max_length=200,
+        help_text="Subject Common Name of the CA certificate"
+    )
+    fingerprint = models.CharField(
+        max_length=100,
+        help_text="SHA-256 fingerprint of the CA certificate"
+    )
+    not_valid_before = models.DateTimeField(
+        help_text="Certificate validity start"
+    )
+    not_valid_after = models.DateTimeField(
+        help_text="Certificate validity end"
+    )
+    is_active = models.BooleanField(
+        default=True,  # type: ignore[reportArgumentType]  # django-stubs issue
+        help_text="Whether this is the current active CA (only one may be active)"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this CA was generated"
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Certificate Authority'
+        verbose_name_plural = 'Certificate Authorities'
+
+    def __str__(self) -> str:
+        """Return string representation of the CA."""
+        active = " (active)" if self.is_active else ""
+        return f"{self.common_name}{active}"
+
+
 class UserProfile(models.Model):
     """
     Extended profile for users.

@@ -4,8 +4,9 @@ from django.urls import include, path, re_path
 from django.urls.resolvers import URLPattern, URLResolver
 from rest_framework.routers import DefaultRouter
 
-from .views import (AccountViewSet, AdminUserViewSet, CommandViewSet,
-                    DeviceViewSet, LocationViewSet)
+from .views import (AccountViewSet, AdminUserViewSet,
+                    CertificateAuthorityViewSet, CommandViewSet, DeviceViewSet,
+                    LocationViewSet)
 
 
 class OptionalSlashRouter(DefaultRouter):
@@ -21,6 +22,7 @@ router.register(r'locations', LocationViewSet, basename='location')
 router.register(r'devices', DeviceViewSet, basename='device')
 router.register(r'commands', CommandViewSet, basename='command')
 router.register(r'admin/users', AdminUserViewSet, basename='admin-user')
+router.register(r'admin/pki/ca', CertificateAuthorityViewSet, basename='admin-ca')
 
 account_list = AccountViewSet.as_view({'get': 'list', 'patch': 'partial_update'})
 account_change_password = AccountViewSet.as_view({'post': 'change_password'})

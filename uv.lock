@@ -486,6 +486,7 @@ source = { editable = "." }
 dependencies = [
     { name = "amqtt" },
     { name = "channels" },
+    { name = "cryptography" },
     { name = "daphne" },
     { name = "django" },
     { name = "djangorestframework" },
@@ -521,6 +522,7 @@ requires-dist = [
     { name = "amqtt", git = "https://github.com/Yakifo/amqtt.git" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.7.0" },
     { name = "channels", specifier = ">=4.0.0" },
+    { name = "cryptography", specifier = ">=46.0.4" },
     { name = "daphne", specifier = ">=4.0.0" },
     { name = "django", specifier = ">=5.0,<7.0" },
     { name = "djangorestframework", specifier = ">=3.14.0" },
