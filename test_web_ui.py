@@ -811,6 +811,15 @@ class TestAdminPanel:
         assert_that(content, contains_string('Back to Map'))
         assert_that(content, contains_string('href="/"'))
 
+    def test_admin_panel_has_password_toggle(self, admin_logged_in_client: Client) -> None:
+        """Create user form should have a password visibility toggle."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('id="password-toggle"'))
+        assert_that(content, contains_string('aria-label="Show password"'))
+        assert_that(content, contains_string('class="eye-icon"'))
+        assert_that(content, contains_string('class="eye-off-icon"'))
+
 
 @pytest.mark.django_db
 class TestAdminPanelPKI:
