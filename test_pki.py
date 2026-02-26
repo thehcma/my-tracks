@@ -1,18 +1,21 @@
-"""Tests for PKI (Certificate Authority) functionality."""
+"""Tests for PKI (Certificate Authority and Server Certificate) functionality."""
 from typing import Any
 
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
+from cryptography.x509.oid import ExtendedKeyUsageOID
 from hamcrest import (assert_that, contains_string, equal_to, greater_than,
-                      has_key, has_length, is_, is_not, not_none, starts_with)
+                      has_item, has_key, has_length, is_, is_not, not_none,
+                      starts_with)
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from my_tracks.models import CertificateAuthority
+from my_tracks.models import CertificateAuthority, ServerCertificate
 from my_tracks.pki import (ALLOWED_KEY_SIZES, decrypt_private_key,
                            encrypt_private_key, generate_ca_certificate,
-                           get_certificate_expiry, get_certificate_fingerprint,
+                           generate_server_certificate, get_certificate_expiry,
+                           get_certificate_fingerprint, get_certificate_sans,
                            get_certificate_subject)
 
 
@@ -377,4 +380,525 @@ class TestCertificateAuthorityPermissions:
         """Test unauthenticated cannot list CAs."""
         client = APIClient()
         response = client.get('/api/admin/pki/ca/')
+        assert_that(response.status_code, equal_to(status.HTTP_403_FORBIDDEN))
+
+
+# ---------------------------------------------------------------------------
+# Server Certificate Tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def ca_with_key(db: Any) -> tuple[CertificateAuthority, bytes]:
+    """Create an active CA and return (ca_model, decrypted_key_pem)."""
+    cert_pem, key_pem = generate_ca_certificate(
+        common_name="Test CA", validity_days=3650, key_size=2048
+    )
+    encrypted_key = encrypt_private_key(key_pem)
+    ca = CertificateAuthority.objects.create(
+        certificate_pem=cert_pem.decode(),
+        encrypted_private_key=encrypted_key,
+        common_name="Test CA",
+        fingerprint=get_certificate_fingerprint(cert_pem),
+        key_size=2048,
+        not_valid_before=get_certificate_expiry(cert_pem),
+        not_valid_after=get_certificate_expiry(cert_pem),
+        is_active=True,
+    )
+    return ca, key_pem
+
+
+@pytest.mark.django_db
+class TestServerCertificateCrypto:
+    """Test server certificate generation crypto functions."""
+
+    def test_generate_server_cert_returns_pem(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test that generate_server_certificate returns valid PEM data."""
+        ca, key_pem = ca_with_key
+        cert_pem, srv_key_pem = generate_server_certificate(
+            ca_cert_pem=ca.certificate_pem.encode(),
+            ca_key_pem=key_pem,
+            common_name="myserver.local",
+            san_entries=["myserver.local", "192.168.1.10"],
+            key_size=2048,
+        )
+        assert_that(cert_pem.decode(), starts_with("-----BEGIN CERTIFICATE-----"))
+        assert_that(srv_key_pem.decode(), starts_with("-----BEGIN PRIVATE KEY-----"))
+
+    def test_server_cert_signed_by_ca(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test server cert's issuer matches the CA subject."""
+        ca, key_pem = ca_with_key
+        cert_pem, _ = generate_server_certificate(
+            ca_cert_pem=ca.certificate_pem.encode(),
+            ca_key_pem=key_pem,
+            common_name="server.test",
+            san_entries=["server.test"],
+            key_size=2048,
+        )
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        ca_cert = x509.load_pem_x509_certificate(ca.certificate_pem.encode())
+        assert_that(cert.issuer, equal_to(ca_cert.subject))
+
+    def test_server_cert_is_not_ca(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test server cert has CA=False basic constraint."""
+        ca, key_pem = ca_with_key
+        cert_pem, _ = generate_server_certificate(
+            ca_cert_pem=ca.certificate_pem.encode(),
+            ca_key_pem=key_pem,
+            common_name="server.test",
+            san_entries=["server.test"],
+            key_size=2048,
+        )
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
+        assert_that(bc.value.ca, is_(False))
+
+    def test_server_cert_key_usage(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test server cert has correct key usage flags."""
+        ca, key_pem = ca_with_key
+        cert_pem, _ = generate_server_certificate(
+            ca_cert_pem=ca.certificate_pem.encode(),
+            ca_key_pem=key_pem,
+            common_name="server.test",
+            san_entries=["server.test"],
+            key_size=2048,
+        )
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        ku = cert.extensions.get_extension_for_class(x509.KeyUsage)
+        assert_that(ku.value.digital_signature, is_(True))
+        assert_that(ku.value.key_encipherment, is_(True))
+        assert_that(ku.value.key_cert_sign, is_(False))
+
+    def test_server_cert_extended_key_usage(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test server cert has serverAuth extended key usage."""
+        ca, key_pem = ca_with_key
+        cert_pem, _ = generate_server_certificate(
+            ca_cert_pem=ca.certificate_pem.encode(),
+            ca_key_pem=key_pem,
+            common_name="server.test",
+            san_entries=["server.test"],
+            key_size=2048,
+        )
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        eku = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage)
+        assert_that(list(eku.value), has_item(ExtendedKeyUsageOID.SERVER_AUTH))
+
+    def test_server_cert_sans(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test server cert includes expected SANs."""
+        ca, key_pem = ca_with_key
+        cert_pem, _ = generate_server_certificate(
+            ca_cert_pem=ca.certificate_pem.encode(),
+            ca_key_pem=key_pem,
+            common_name="server.test",
+            san_entries=["server.test", "10.0.1.5", "192.168.1.10"],
+            key_size=2048,
+        )
+        sans = get_certificate_sans(cert_pem)
+        assert_that(sans, has_item("server.test"))
+        assert_that(sans, has_item("10.0.1.5"))
+        assert_that(sans, has_item("192.168.1.10"))
+
+    def test_server_cert_custom_key_size(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test server cert with 3072-bit key."""
+        ca, key_pem = ca_with_key
+        cert_pem, _ = generate_server_certificate(
+            ca_cert_pem=ca.certificate_pem.encode(),
+            ca_key_pem=key_pem,
+            common_name="server.test",
+            san_entries=["server.test"],
+            key_size=3072,
+        )
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        assert_that(cert.public_key().key_size, equal_to(3072))
+
+    def test_server_cert_invalid_key_size(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test invalid key size raises ValueError."""
+        from hamcrest import calling, raises
+        ca, key_pem = ca_with_key
+        assert_that(
+            calling(generate_server_certificate).with_args(
+                ca_cert_pem=ca.certificate_pem.encode(),
+                ca_key_pem=key_pem,
+                common_name="server.test",
+                san_entries=["server.test"],
+                key_size=1024,
+            ),
+            raises(ValueError, "Expected key_size in"),
+        )
+
+    def test_server_cert_empty_sans(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test empty SAN list raises ValueError."""
+        from hamcrest import calling, raises
+        ca, key_pem = ca_with_key
+        assert_that(
+            calling(generate_server_certificate).with_args(
+                ca_cert_pem=ca.certificate_pem.encode(),
+                ca_key_pem=key_pem,
+                common_name="server.test",
+                san_entries=[],
+            ),
+            raises(ValueError, "Expected at least one SAN"),
+        )
+
+    def test_server_cert_custom_validity(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test server cert with custom validity period."""
+        ca, key_pem = ca_with_key
+        cert_pem, _ = generate_server_certificate(
+            ca_cert_pem=ca.certificate_pem.encode(),
+            ca_key_pem=key_pem,
+            common_name="server.test",
+            san_entries=["server.test"],
+            validity_days=30,
+            key_size=2048,
+        )
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        delta = cert.not_valid_after_utc - cert.not_valid_before_utc
+        assert_that(delta.days, equal_to(30))
+
+    def test_get_certificate_sans_no_san_extension(self) -> None:
+        """Test get_certificate_sans returns empty list when no SAN."""
+        cert_pem, _ = generate_ca_certificate(common_name="No SAN", key_size=2048)
+        sans = get_certificate_sans(cert_pem)
+        assert_that(sans, has_length(0))
+
+
+@pytest.mark.django_db
+class TestServerCertificateModel:
+    """Test the ServerCertificate model."""
+
+    def test_create_server_cert_model(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test creating a server cert record in the database."""
+        ca, key_pem = ca_with_key
+        cert_pem, srv_key_pem = generate_server_certificate(
+            ca_cert_pem=ca.certificate_pem.encode(),
+            ca_key_pem=key_pem,
+            common_name="server.test",
+            san_entries=["server.test", "10.0.1.5"],
+            key_size=2048,
+        )
+        encrypted_key = encrypt_private_key(srv_key_pem)
+
+        sc = ServerCertificate.objects.create(
+            issuing_ca=ca,
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypted_key,
+            common_name="server.test",
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            san_entries=["server.test", "10.0.1.5"],
+            key_size=2048,
+            not_valid_before=get_certificate_expiry(cert_pem),
+            not_valid_after=get_certificate_expiry(cert_pem),
+            is_active=True,
+        )
+        assert_that(sc.pk, is_(not_none()))
+        assert_that(sc.common_name, equal_to("server.test"))
+        assert_that(sc.key_size, equal_to(2048))
+        assert_that(sc.is_active, is_(True))
+        assert_that(sc.san_entries, has_item("10.0.1.5"))
+
+    def test_server_cert_str_representation(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test __str__ of ServerCertificate."""
+        ca, key_pem = ca_with_key
+        cert_pem, srv_key_pem = generate_server_certificate(
+            ca_cert_pem=ca.certificate_pem.encode(),
+            ca_key_pem=key_pem,
+            common_name="my-server",
+            san_entries=["my-server"],
+            key_size=2048,
+        )
+        sc = ServerCertificate.objects.create(
+            issuing_ca=ca,
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypt_private_key(srv_key_pem),
+            common_name="my-server",
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            san_entries=["my-server"],
+            key_size=2048,
+            not_valid_before=get_certificate_expiry(cert_pem),
+            not_valid_after=get_certificate_expiry(cert_pem),
+            is_active=True,
+        )
+        assert_that(str(sc), equal_to("my-server (active)"))
+        sc.is_active = False
+        assert_that(str(sc), equal_to("my-server"))
+
+    def test_server_cert_fk_to_ca(self, ca_with_key: tuple[CertificateAuthority, bytes]) -> None:
+        """Test FK relationship to CertificateAuthority."""
+        ca, key_pem = ca_with_key
+        cert_pem, srv_key_pem = generate_server_certificate(
+            ca_cert_pem=ca.certificate_pem.encode(),
+            ca_key_pem=key_pem,
+            common_name="fk-test",
+            san_entries=["fk-test"],
+            key_size=2048,
+        )
+        sc = ServerCertificate.objects.create(
+            issuing_ca=ca,
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypt_private_key(srv_key_pem),
+            common_name="fk-test",
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            san_entries=["fk-test"],
+            key_size=2048,
+            not_valid_before=get_certificate_expiry(cert_pem),
+            not_valid_after=get_certificate_expiry(cert_pem),
+        )
+        assert_that(sc.issuing_ca.pk, equal_to(ca.pk))
+        assert_that(ca.server_certificates.count(), equal_to(1))
+
+
+@pytest.fixture
+def admin_with_ca(admin_api_client: APIClient) -> APIClient:
+    """Create an active CA via API and return the admin client."""
+    admin_api_client.post('/api/admin/pki/ca/', {
+        'common_name': 'Test CA',
+        'validity_days': 3650,
+        'key_size': 2048,
+    }, format='json')
+    return admin_api_client
+
+
+@pytest.mark.django_db
+class TestServerCertificateAPI:
+    """Test server certificate REST API endpoints."""
+
+    def test_list_server_certs_empty(self, admin_with_ca: APIClient) -> None:
+        """Test GET /api/admin/pki/server-cert/ returns empty list."""
+        response = admin_with_ca.get('/api/admin/pki/server-cert/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response.data, has_length(0))
+
+    def test_create_server_cert(self, admin_with_ca: APIClient) -> None:
+        """Test POST /api/admin/pki/server-cert/ generates a server cert."""
+        response = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'myserver.local',
+            'validity_days': 365,
+            'key_size': 2048,
+            'san_entries': ['myserver.local', '192.168.1.10'],
+        }, format='json')
+        assert_that(response.status_code, equal_to(status.HTTP_201_CREATED))
+        assert_that(response.data, has_key('id'))
+        assert_that(response.data['common_name'], equal_to('myserver.local'))
+        assert_that(response.data['is_active'], is_(True))
+        assert_that(response.data['san_entries'], has_item('myserver.local'))
+        assert_that(response.data['san_entries'], has_item('192.168.1.10'))
+        assert_that(response.data['key_size'], equal_to(2048))
+        assert_that(response.data['issuing_ca_name'], equal_to('Test CA'))
+
+    def test_create_server_cert_no_ca(self, admin_api_client: APIClient) -> None:
+        """Test creating server cert without active CA returns 400."""
+        response = admin_api_client.post('/api/admin/pki/server-cert/', {
+            'common_name': 'myserver',
+            'san_entries': ['myserver'],
+        }, format='json')
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+        assert_that(response.data['error'], contains_string('No active CA'))
+
+    def test_create_server_cert_empty_cn(self, admin_with_ca: APIClient) -> None:
+        """Test empty common_name is rejected."""
+        response = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': '  ',
+            'san_entries': ['myserver'],
+        }, format='json')
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+
+    def test_create_server_cert_no_sans(self, admin_with_ca: APIClient) -> None:
+        """Test empty SAN list is rejected."""
+        response = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'myserver',
+            'san_entries': [],
+        }, format='json')
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+        assert_that(response.data['error'], contains_string('SAN'))
+
+    def test_create_server_cert_invalid_key_size(self, admin_with_ca: APIClient) -> None:
+        """Test invalid key_size is rejected."""
+        response = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'myserver',
+            'san_entries': ['myserver'],
+            'key_size': 1024,
+        }, format='json')
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+        assert_that(response.data['error'], contains_string('key_size'))
+
+    def test_create_server_cert_invalid_validity(self, admin_with_ca: APIClient) -> None:
+        """Test invalid validity_days is rejected."""
+        response = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'myserver',
+            'san_entries': ['myserver'],
+            'validity_days': 'abc',
+        }, format='json')
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+
+    def test_create_server_cert_deactivates_previous(self, admin_with_ca: APIClient) -> None:
+        """Test creating a new server cert deactivates the previous one."""
+        resp1 = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'server1',
+            'san_entries': ['server1'],
+            'key_size': 2048,
+        }, format='json')
+        cert1_id = resp1.data['id']
+
+        resp2 = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'server2',
+            'san_entries': ['server2'],
+            'key_size': 2048,
+        }, format='json')
+        assert_that(resp2.status_code, equal_to(status.HTTP_201_CREATED))
+
+        cert1 = ServerCertificate.objects.get(pk=cert1_id)
+        assert_that(cert1.is_active, is_(False))
+
+        cert2 = ServerCertificate.objects.get(pk=resp2.data['id'])
+        assert_that(cert2.is_active, is_(True))
+
+    def test_get_active_server_cert(self, admin_with_ca: APIClient) -> None:
+        """Test GET /api/admin/pki/server-cert/active/ returns active cert."""
+        admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'active-server',
+            'san_entries': ['active-server'],
+            'key_size': 2048,
+        }, format='json')
+        response = admin_with_ca.get('/api/admin/pki/server-cert/active/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response.data['common_name'], equal_to('active-server'))
+
+    def test_get_active_server_cert_when_none(self, admin_with_ca: APIClient) -> None:
+        """Test GET active returns 404 when no active cert."""
+        response = admin_with_ca.get('/api/admin/pki/server-cert/active/')
+        assert_that(response.status_code, equal_to(status.HTTP_404_NOT_FOUND))
+
+    def test_destroy_server_cert(self, admin_with_ca: APIClient) -> None:
+        """Test DELETE deactivates a server cert."""
+        resp = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'to-deactivate',
+            'san_entries': ['to-deactivate'],
+            'key_size': 2048,
+        }, format='json')
+        cert_id = resp.data['id']
+
+        response = admin_with_ca.delete(f'/api/admin/pki/server-cert/{cert_id}/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+
+        cert = ServerCertificate.objects.get(pk=cert_id)
+        assert_that(cert.is_active, is_(False))
+
+    def test_destroy_already_inactive(self, admin_with_ca: APIClient) -> None:
+        """Test deactivating an already inactive cert returns 400."""
+        resp = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'inactive',
+            'san_entries': ['inactive'],
+            'key_size': 2048,
+        }, format='json')
+        cert_id = resp.data['id']
+        admin_with_ca.delete(f'/api/admin/pki/server-cert/{cert_id}/')
+
+        response = admin_with_ca.delete(f'/api/admin/pki/server-cert/{cert_id}/')
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+
+    def test_destroy_nonexistent(self, admin_with_ca: APIClient) -> None:
+        """Test deactivating a nonexistent cert returns 404."""
+        response = admin_with_ca.delete('/api/admin/pki/server-cert/99999/')
+        assert_that(response.status_code, equal_to(status.HTTP_404_NOT_FOUND))
+
+    def test_download_server_cert(self, admin_with_ca: APIClient) -> None:
+        """Test GET download returns PEM file."""
+        resp = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'dl-test',
+            'san_entries': ['dl-test'],
+            'key_size': 2048,
+        }, format='json')
+        cert_id = resp.data['id']
+
+        response = admin_with_ca.get(f'/api/admin/pki/server-cert/{cert_id}/download/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response['Content-Type'], equal_to('application/x-pem-file'))
+        assert_that(response['Content-Disposition'], contains_string('-server.pem'))
+        assert_that(response.content.decode(), starts_with('-----BEGIN CERTIFICATE-----'))
+
+    def test_download_nonexistent(self, admin_with_ca: APIClient) -> None:
+        """Test downloading nonexistent cert returns 404."""
+        response = admin_with_ca.get('/api/admin/pki/server-cert/99999/download/')
+        assert_that(response.status_code, equal_to(status.HTTP_404_NOT_FOUND))
+
+    def test_expunge_inactive_cert(self, admin_with_ca: APIClient) -> None:
+        """Test expunge permanently deletes an inactive cert."""
+        resp = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'to-expunge',
+            'san_entries': ['to-expunge'],
+            'key_size': 2048,
+        }, format='json')
+        cert_id = resp.data['id']
+        admin_with_ca.delete(f'/api/admin/pki/server-cert/{cert_id}/')
+
+        response = admin_with_ca.delete(f'/api/admin/pki/server-cert/{cert_id}/expunge/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(ServerCertificate.objects.filter(pk=cert_id).exists(), is_(False))
+
+    def test_expunge_active_cert_rejected(self, admin_with_ca: APIClient) -> None:
+        """Test expunging an active cert returns 400."""
+        resp = admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'active-cert',
+            'san_entries': ['active-cert'],
+            'key_size': 2048,
+        }, format='json')
+        cert_id = resp.data['id']
+
+        response = admin_with_ca.delete(f'/api/admin/pki/server-cert/{cert_id}/expunge/')
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+
+    def test_expunge_nonexistent_cert(self, admin_with_ca: APIClient) -> None:
+        """Test expunging nonexistent cert returns 404."""
+        response = admin_with_ca.delete('/api/admin/pki/server-cert/99999/expunge/')
+        assert_that(response.status_code, equal_to(status.HTTP_404_NOT_FOUND))
+
+    def test_list_server_certs_after_creation(self, admin_with_ca: APIClient) -> None:
+        """Test listing server certs after creating some."""
+        admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'cert1',
+            'san_entries': ['cert1'],
+            'key_size': 2048,
+        }, format='json')
+        admin_with_ca.post('/api/admin/pki/server-cert/', {
+            'common_name': 'cert2',
+            'san_entries': ['cert2'],
+            'key_size': 2048,
+        }, format='json')
+
+        response = admin_with_ca.get('/api/admin/pki/server-cert/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response.data, has_length(2))
+
+
+@pytest.mark.django_db
+class TestServerCertificatePermissions:
+    """Test server cert endpoints are admin-only."""
+
+    def test_list_forbidden_for_non_admin(self, auth_api_client: APIClient) -> None:
+        """Test non-admin cannot list server certs."""
+        response = auth_api_client.get('/api/admin/pki/server-cert/')
+        assert_that(response.status_code, equal_to(status.HTTP_403_FORBIDDEN))
+
+    def test_create_forbidden_for_non_admin(self, auth_api_client: APIClient) -> None:
+        """Test non-admin cannot create server cert."""
+        response = auth_api_client.post('/api/admin/pki/server-cert/', {
+            'common_name': 'x',
+            'san_entries': ['x'],
+        }, format='json')
+        assert_that(response.status_code, equal_to(status.HTTP_403_FORBIDDEN))
+
+    def test_delete_forbidden_for_non_admin(self, auth_api_client: APIClient) -> None:
+        """Test non-admin cannot delete server cert."""
+        response = auth_api_client.delete('/api/admin/pki/server-cert/1/')
+        assert_that(response.status_code, equal_to(status.HTTP_403_FORBIDDEN))
+
+    def test_active_forbidden_for_non_admin(self, auth_api_client: APIClient) -> None:
+        """Test non-admin cannot access active server cert."""
+        response = auth_api_client.get('/api/admin/pki/server-cert/active/')
+        assert_that(response.status_code, equal_to(status.HTTP_403_FORBIDDEN))
+
+    def test_list_forbidden_for_unauthenticated(self) -> None:
+        """Test unauthenticated cannot list server certs."""
+        client = APIClient()
+        response = client.get('/api/admin/pki/server-cert/')
         assert_that(response.status_code, equal_to(status.HTTP_403_FORBIDDEN))
