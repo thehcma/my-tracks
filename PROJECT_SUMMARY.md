@@ -2,7 +2,7 @@
 
 ## Overview
 
-A production-ready backend server for the OwnTracks Android/iOS app, designed to receive, persist, and serve geolocation data with modern Python 3.14+ features, comprehensive type hints, and RESTful API design.
+A self-hosted location tracking backend for the [OwnTracks](https://owntracks.org/) Android/iOS app. Receives, persists, and visualizes geolocation data via HTTP and MQTT, with a live map UI, real-time WebSocket updates, and a PKI-based certificate management system for secure MQTT TLS. Built with Python 3.14+, comprehensive type hints, and RESTful API design.
 
 **Package Management**: Uses [uv](https://github.com/astral-sh/uv) exclusively for fast, deterministic dependency management.
 
@@ -16,7 +16,7 @@ A production-ready backend server for the OwnTracks Android/iOS app, designed to
 
 ### Technology Stack
 
-- **Framework**: Python with REST API
+- **Framework**: Django + Django REST Framework
 - **Language**: Python 3.14+ with full type hints
 - **Package Manager**: `uv` for fast, reliable dependency management
 - **Database**: SQLite (development) / PostgreSQL (production)
@@ -133,7 +133,7 @@ my-tracks/
 
 - **Type Safety**
   - Full type hints throughout codebase
-  - Python 3.12+ features (dataclasses where appropriate)
+  - Python 3.14+ features (dataclasses where appropriate)
   - Type annotations on models, views, serializers
 
 - **Admin Interface**
@@ -374,9 +374,9 @@ PolyForm Noncommercial License 1.0.0 - See [LICENSE](LICENSE) file for details
 
 ## Acknowledgments
 
-- OwnTracks project for the excellent location tracking app
-- Python REST framework communities
-- Python type hints and modern Python features
+- [OwnTracks](https://owntracks.org/) for the excellent location tracking app
+- [Django](https://www.djangoproject.com/) and [Django REST Framework](https://www.django-rest-framework.org/)
+- [amqtt](https://github.com/Yakifo/amqtt) for the embedded MQTT broker
 
 ---
 

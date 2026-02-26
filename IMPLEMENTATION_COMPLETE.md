@@ -2,7 +2,7 @@
 
 ## 🎉 Project Status: COMPLETE
 
-My Tracks OwnTracks backend server has been fully implemented and is ready for use.
+My Tracks — a self-hosted location tracking backend for OwnTracks — has been fully implemented and is ready for use.
 
 **Package Management**: Uses [uv](https://github.com/astral-sh/uv) exclusively for fast, deterministic dependency management.
 
@@ -12,13 +12,13 @@ My Tracks OwnTracks backend server has been fully implemented and is ready for u
 
 ### Core Application Files (22 files)
 
-1. **Django Project Configuration**
-   - `manage.py` - Django management script
+1. **Project Configuration**
+   - `manage.py` - Management script
    - `pyproject.toml` - Modern Python package configuration (dependencies managed with `uv`)
 
-2. **Django Project Package** (`mytracks/`)
+2. **Configuration Package** (`config/`)
    - `__init__.py` - Package initialization
-   - `settings.py` - Full Django configuration with type hints
+   - `settings.py` - Application settings with type hints
    - `urls.py` - Main URL routing
    - `wsgi.py` - WSGI application
    - `asgi.py` - ASGI application
@@ -29,7 +29,7 @@ My Tracks OwnTracks backend server has been fully implemented and is ready for u
    - `serializers.py` - DRF serializers for OwnTracks format
    - `views.py` - API viewsets with validation
    - `urls.py` - App URL routing
-   - `admin.py` - Django admin configuration
+   - `admin.py` - Admin configuration
    - `apps.py` - App configuration
    - `migrations/__init__.py` - Migrations package
 
@@ -86,7 +86,7 @@ My Tracks OwnTracks backend server has been fully implemented and is ready for u
 - [x] OwnTracks format transformation
 
 ### ✅ Code Quality
-- [x] Full type hints (Python 3.12+)
+- [x] Full type hints (Python 3.14+)
 - [x] PEP 8 compliance
 - [x] Comprehensive docstrings
 - [x] Clear error messages
@@ -189,7 +189,7 @@ my-tracks/
 ├── Scripts (2 files)
 │   ├── setup
 │   └── verify-setup
-├── Django Project (1 file + 5 in config/)
+├── Project Configuration (1 file + 5 in config/)
 │   ├── manage.py
 │   └── config/
 │       ├── __init__.py
@@ -217,7 +217,7 @@ my-tracks/
 2. **Error Messages**: Informative messages with "expected vs actual" format
 3. **OwnTracks Compatibility**: Direct support for OwnTracks JSON format
 4. **Package Manager**: Using `uv` for fast, reliable dependency management
-5. **Modern Python**: Python 3.12+ features and best practices
+5. **Modern Python**: Python 3.14+ features and best practices
 6. **REST API**: Clean, intuitive API design with DRF
 7. **Comprehensive Docs**: Multiple documentation levels for different audiences
 8. **Production Ready**: Includes deployment guide and production configurations
@@ -262,7 +262,7 @@ my-tracks/
 
 ## 🎉 Success Criteria Met
 
-- ✅ Django project structure created
+- ✅ Project structure created
 - ✅ OwnTracks HTTP protocol support implemented
 - ✅ Location data persistence working
 - ✅ RESTful API with all required endpoints
@@ -273,7 +273,7 @@ my-tracks/
 - ✅ Automated setup scripts
 - ✅ Complete test suite
 - ✅ Error messages with context
-- ✅ Modern Python features (3.12+)
+- ✅ Modern Python features (3.14+)
 
 ## 💡 Highlights
 
@@ -298,11 +298,10 @@ my-tracks/
 ## 🙏 Acknowledgments
 
 Built following:
-- Django best practices
-- Django REST Framework patterns
-- OwnTracks HTTP protocol specification
+- OwnTracks HTTP and MQTT protocol specifications
 - PEP 8 style guidelines
 - Modern Python type hinting conventions
+- REST API best practices
 
 ## 📞 Support Resources
 
@@ -319,4 +318,4 @@ Built following:
 **Date**: 2026
 **Version**: 0.1.0
 
-The OwnTracks backend is now fully functional and ready to receive location data from OwnTracks clients!
+My Tracks is now fully functional and ready to receive location data from OwnTracks clients!

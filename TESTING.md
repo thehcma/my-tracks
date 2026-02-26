@@ -1,6 +1,6 @@
 # Testing Guide
 
-This document provides guidelines for testing the OwnTracks backend server.
+This document provides guidelines for testing My Tracks.
 
 ## Test Port Configuration
 

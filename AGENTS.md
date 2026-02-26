@@ -1,12 +1,12 @@
 # Agent Definitions
 
-This document defines the four specialized agents for the OwnTracks Django backend project.
+This document defines the four specialized agents for the My Tracks project.
 
 **Configuration**: See [AGENT_MODELS.md](./AGENT_MODELS.md) for model assignments and `.agent-models.json` for machine-readable configuration.
 
 **Package Manager**: This project uses `uv` as the Python package manager for fast, reliable dependency management.
 
-**Python Version Policy**: Always use the latest stable Python version available via Homebrew. Currently Python 3.14.x is the latest stable release. The project requires Python 3.12+ as minimum, but should be developed and tested with the latest version to ensure compatibility and access to latest features.
+**Python Version Policy**: Always use the latest stable Python version available via Homebrew. Currently Python 3.14.x is the latest stable release. The project requires Python 3.14+ (`requires-python = ">=3.14"` in pyproject.toml).
 
 ## Workflow Requirements
 
@@ -131,7 +131,7 @@ This document defines the four specialized agents for the OwnTracks Django backe
 **Role**: Core developer focused on creating efficient, maintainable code.
 
 **Responsibilities**:
-- Design a webserver using Python's django to function as a backend server for  the Android OwnTracks app, it should be able to persist the geolocation information
+- Design and maintain a self-hosted location tracking backend for the OwnTracks Android/iOS app, persisting geolocation data and providing real-time visualization
 - Use modern Python features (3.14+) including type hints and dataclasses where appropriate
 - Write clear, self-documenting code with comprehensive docstrings
 - Follow PEP 8 style guidelines
