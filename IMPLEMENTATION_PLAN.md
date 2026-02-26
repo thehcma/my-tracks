@@ -156,10 +156,10 @@ Evolution plan for My Tracks, a Django-based backend for the OwnTracks location 
 
 ## Upcoming Work
 
-### Phase 6, Step 2b: PKI — Configurable Key Size & Server Certificate ← NEXT
+### Phase 6, Step 2b: PKI — Configurable Key Size & Server Certificate (in review)
 Configurable RSA key size across all PKI operations, plus server certificate for MQTT TLS.
 
-- **2b-i: Configurable RSA Key Size** (PR 1 in stack)
+- **2b-i: Configurable RSA Key Size** (PR #276 — in review)
   - Add `key_size` parameter to `generate_ca_certificate()` (default 4096, choices: 2048, 3072, 4096)
   - Add `key_size` field to `CertificateAuthority` model to record key size used
   - Admin panel UI: key size dropdown in CA generation form
@@ -167,7 +167,7 @@ Configurable RSA key size across all PKI operations, plus server certificate for
   - Migration for new `key_size` column (default 4096 for existing CAs)
   - Tests for key size validation, model field, API parameter, UI dropdown
 
-- **2b-ii: Server Certificate Model & Generation** (PR 2 in stack)
+- **2b-ii: Server Certificate Model & Generation** (PR #278 — in review)
   - `ServerCertificate` model storing server cert + private key (signed by active CA):
     - Certificate PEM, encrypted private key, common name, fingerprint
     - `not_valid_before`, `not_valid_after`, `is_active` (singleton pattern with history)
@@ -188,7 +188,7 @@ Configurable RSA key size across all PKI operations, plus server certificate for
     - `DELETE /api/admin/pki/server-cert/{id}/expunge/` — permanently delete inactive cert
   - Tests for server cert generation, SAN validation, CA chain, key size, model, API
 
-- **2b-iii: Server Certificate Admin UI** (PR 3 in stack)
+- **2b-iii: Server Certificate Admin UI** (PR #279 — in review)
   - Admin panel section: "Server Certificate (MQTT TLS)"
   - Display active server cert: CN, SANs, fingerprint, validity, issuing CA, key size
   - Generate form: CN (default hostname), validity days, key size dropdown, additional SANs
@@ -197,16 +197,7 @@ Configurable RSA key size across all PKI operations, plus server certificate for
   - Requires active CA — form disabled with message if no active CA exists
   - Tests for admin panel rendering, form behavior, CA dependency
 
-- **2b-iv: MQTT Broker TLS Integration** (PR 4 in stack)
-  - MQTT broker reads active server cert from database at startup
-  - `--mqtt-tls-port` flag (default: 8883, -1 = disabled)
-  - Broker presents server certificate for TLS connections
-  - Write cert/key to temporary files for amqtt TLS configuration
-  - Display TLS status and port in web UI (About & Setup page)
-  - OwnTracks setup instructions updated for TLS mode
-  - Tests for TLS listener startup, cert loading, config flag
-
-### Phase 6, Step 3: Per-User Client Certificate Management
+### Phase 6, Step 3: Per-User Client Certificate Management ← NEXT
 Admin issues/revokes client certificates; users view and download their own.
 
 - **3a: Client Certificate Issuance & Revocation (Admin Panel)**
@@ -214,16 +205,19 @@ Admin issues/revokes client certificates; users view and download their own.
     - Client certificate (PEM)
     - Private key (encrypted at rest)
     - Serial number, expiry date, revocation status, revocation date
-  - Certificate generation using `cryptography` library (X.509, RSA/EC keys)
+    - `key_size` (configurable: 2048, 3072, 4096)
+  - Certificate generation using `cryptography` library (X.509, RSA keys)
+  - Certificate Revocation List (CRL) generation from revoked certs
   - Admin panel UI:
-    - Issue certificate for a specific user (select user, set validity)
+    - Issue certificate for a specific user (select user, set validity, key size)
     - View all issued certificates with status (active/revoked/expired)
-    - Revoke a certificate (marks as revoked, MQTT broker rejects on next connect)
+    - Revoke a certificate (marks as revoked, updates CRL)
   - Admin REST endpoints:
     - `POST /api/admin/pki/client-certs/` — issue certificate for a user
     - `GET /api/admin/pki/client-certs/` — list all issued certificates
     - `POST /api/admin/pki/client-certs/{id}/revoke/` — revoke a certificate
-  - Tests for cert generation, signing chain validation, revocation, admin-only access
+    - `GET /api/admin/pki/crl/` — download current CRL
+  - Tests for cert generation, signing chain validation, revocation, CRL, admin-only access
 
 - **3b: User Certificate Access & OwnTracks Configuration**
   - Profile page (`/profile/`) shows allocated certificate:
@@ -232,9 +226,28 @@ Admin issues/revokes client certificates; users view and download their own.
     - OwnTracks connection settings (pre-filled MQTT config with TLS enabled)
   - User REST endpoints:
     - `GET /api/account/certificate/` — download current certificate + key bundle
-  - MQTT broker updated to accept TLS client-certificate authentication
   - OwnTracks device configuration instructions for certificate-based auth
-  - Tests for user cert access, download, MQTT TLS client auth
+  - Tests for user cert access, download formats
+
+### Phase 6, Step 4: MQTT Broker TLS Integration
+Full TLS integration: server certificate presentation + client certificate authentication.
+
+- **Server-side TLS**
+  - MQTT broker reads active server cert from database at startup
+  - `--mqtt-tls-port` flag (default: 8883, -1 = disabled)
+  - Broker presents server certificate for TLS connections
+  - Write cert/key to temporary files for amqtt TLS configuration
+  - Display TLS status and port in web UI (About & Setup page)
+  - OwnTracks setup instructions updated for TLS mode
+
+- **Client certificate authentication**
+  - MQTT broker requires client certificate for TLS connections
+  - Validate client cert is signed by active CA
+  - Check client cert against CRL (reject revoked certs)
+  - Map client cert CN to Django user for topic ACL
+  - Fallback to username/password auth when client cert not provided
+
+- Tests for TLS listener startup, cert loading, client cert validation, CRL checking
 
 ### Phase 7: Advanced Integration
 1. **Transition events** — Handle region enter/exit events, store transition history
@@ -255,8 +268,8 @@ my_tracks/mqtt/
 
 ## Test Coverage
 
-- 530 Python tests + 79 TypeScript tests passing
-- 90%+ code coverage
+- 597 Python tests + 79 TypeScript tests passing
+- 93%+ code coverage
 - All pyright checks pass
 
 ## Technical Notes

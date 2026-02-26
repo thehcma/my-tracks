@@ -1134,3 +1134,237 @@ class TestAdminPanelPKI:
         response = admin_logged_in_client.get('/admin-panel/')
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('2048-bit'))
+
+
+@pytest.mark.django_db
+class TestAdminPanelServerCert:
+    """Test the Server Certificate section of the admin panel."""
+
+    def _create_ca(self, client: Client) -> None:
+        """Helper to create a CA certificate."""
+        client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Test CA',
+            'ca_validity_days': '3650',
+            'ca_key_size': '2048',
+        })
+
+    def test_admin_panel_shows_server_cert_section(self, admin_logged_in_client: Client) -> None:
+        """Admin panel should contain the server cert section header."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Server Certificate'))
+        assert_that(content, contains_string('MQTT TLS'))
+
+    def test_no_active_server_cert_message(self, admin_logged_in_client: Client) -> None:
+        """When no server cert exists, show a prompt."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('No active server certificate'))
+
+    def test_generate_form_requires_ca(self, admin_logged_in_client: Client) -> None:
+        """Without a CA, the generate form should show a message."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('CA certificate is required'))
+
+    def test_generate_form_shown_with_ca(self, admin_logged_in_client: Client) -> None:
+        """With an active CA, the generate form should be displayed."""
+        self._create_ca(admin_logged_in_client)
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('sc_common_name'))
+        assert_that(content, contains_string('sc_validity_days'))
+        assert_that(content, contains_string('sc_key_size'))
+        assert_that(content, contains_string('sc_san_entries'))
+
+    def test_generate_server_cert(self, admin_logged_in_client: Client) -> None:
+        """Submitting the form should create a server certificate."""
+        from my_tracks.models import ServerCertificate
+
+        self._create_ca(admin_logged_in_client)
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': 'myserver.local',
+            'sc_validity_days': '365',
+            'sc_key_size': '2048',
+            'sc_san_entries': 'myserver.local, 192.168.1.10',
+        })
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('generated successfully'))
+
+        sc = ServerCertificate.objects.filter(is_active=True).first()
+        assert_that(sc, is_(not_none()))
+        assert_that(sc.common_name, equal_to('myserver.local'))  # type: ignore[union-attr]
+
+    def test_active_server_cert_details(self, admin_logged_in_client: Client) -> None:
+        """After generating, the active server cert details should appear."""
+        self._create_ca(admin_logged_in_client)
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': 'display-test.local',
+            'sc_validity_days': '365',
+            'sc_key_size': '2048',
+            'sc_san_entries': 'display-test.local, 10.0.1.5',
+        })
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('display-test.local'))
+        assert_that(content, contains_string('Fingerprint'))
+        assert_that(content, contains_string('SANs'))
+        assert_that(content, contains_string('10.0.1.5'))
+        assert_that(content, contains_string('Download Server Cert'))
+
+    def test_generate_server_cert_no_ca(self, admin_logged_in_client: Client) -> None:
+        """Generating without a CA should show an error."""
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': 'myserver',
+            'sc_validity_days': '365',
+            'sc_san_entries': 'myserver',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('No active CA'))
+
+    def test_generate_server_cert_empty_cn(self, admin_logged_in_client: Client) -> None:
+        """Empty common name should show an error."""
+        self._create_ca(admin_logged_in_client)
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': '',
+            'sc_validity_days': '365',
+            'sc_san_entries': 'myserver',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Common Name is required'))
+
+    def test_generate_server_cert_no_sans(self, admin_logged_in_client: Client) -> None:
+        """Empty SANs should show an error."""
+        self._create_ca(admin_logged_in_client)
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': 'myserver',
+            'sc_validity_days': '365',
+            'sc_san_entries': '',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('SAN entry is required'))
+
+    def test_generate_server_cert_invalid_key_size(self, admin_logged_in_client: Client) -> None:
+        """Invalid key size should show an error."""
+        self._create_ca(admin_logged_in_client)
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': 'myserver',
+            'sc_validity_days': '365',
+            'sc_key_size': '1024',
+            'sc_san_entries': 'myserver',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Key size must be one of'))
+
+    def test_generate_deactivates_previous(self, admin_logged_in_client: Client) -> None:
+        """Generating a new server cert should deactivate the previous one."""
+        from my_tracks.models import ServerCertificate
+
+        self._create_ca(admin_logged_in_client)
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': 'first-server',
+            'sc_validity_days': '365',
+            'sc_key_size': '2048',
+            'sc_san_entries': 'first-server',
+        })
+        first = ServerCertificate.objects.get(common_name='first-server')
+        assert_that(first.is_active, is_(True))
+
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': 'second-server',
+            'sc_validity_days': '365',
+            'sc_key_size': '2048',
+            'sc_san_entries': 'second-server',
+        })
+        first.refresh_from_db()
+        assert_that(first.is_active, is_(False))
+        second = ServerCertificate.objects.get(common_name='second-server')
+        assert_that(second.is_active, is_(True))
+
+    def test_server_cert_history_table(self, admin_logged_in_client: Client) -> None:
+        """After generating certs, the history table should appear."""
+        self._create_ca(admin_logged_in_client)
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': 'history-server',
+            'sc_validity_days': '365',
+            'sc_key_size': '2048',
+            'sc_san_entries': 'history-server',
+        })
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Server Certificate History'))
+        assert_that(content, contains_string('history-server'))
+
+    def test_expunge_inactive_server_cert(self, admin_logged_in_client: Client) -> None:
+        """Expunging an inactive server cert should permanently delete it."""
+        from my_tracks.models import ServerCertificate
+
+        self._create_ca(admin_logged_in_client)
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': 'old-server',
+            'sc_validity_days': '365',
+            'sc_key_size': '2048',
+            'sc_san_entries': 'old-server',
+        })
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': 'new-server',
+            'sc_validity_days': '365',
+            'sc_key_size': '2048',
+            'sc_san_entries': 'new-server',
+        })
+
+        old = ServerCertificate.objects.get(common_name='old-server')
+        assert_that(old.is_active, is_(False))
+
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'expunge_server_cert',
+            'sc_id': str(old.pk),
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('permanently deleted'))
+        assert_that(ServerCertificate.objects.filter(pk=old.pk).exists(), is_(False))
+
+    def test_expunge_active_server_cert_rejected(self, admin_logged_in_client: Client) -> None:
+        """Expunging an active server cert should be rejected."""
+        from my_tracks.models import ServerCertificate
+
+        self._create_ca(admin_logged_in_client)
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'generate_server_cert',
+            'sc_common_name': 'active-server',
+            'sc_validity_days': '365',
+            'sc_key_size': '2048',
+            'sc_san_entries': 'active-server',
+        })
+        active = ServerCertificate.objects.get(common_name='active-server')
+
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'expunge_server_cert',
+            'sc_id': str(active.pk),
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Cannot expunge'))
+
+    def test_default_sans_populated(self, admin_logged_in_client: Client) -> None:
+        """The SAN field should be pre-populated with local IPs and hostname."""
+        self._create_ca(admin_logged_in_client)
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        import socket
+        hostname = socket.gethostname()
+        assert_that(content, contains_string(hostname))

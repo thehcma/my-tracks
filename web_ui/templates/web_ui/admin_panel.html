@@ -734,6 +734,151 @@
             </div>
             {% endif %}
         </div>
+
+        <div class="admin-card">
+            <h3 class="section-title">PKI — Server Certificate (MQTT TLS)</h3>
+
+            {% if sc_success %}
+            <div class="message success">{{ sc_success }}</div>
+            {% endif %}
+            {% if sc_error %}
+            <div class="message error">{{ sc_error }}</div>
+            {% endif %}
+
+            {% if active_sc %}
+            <div class="ca-status">
+                <div class="ca-status-header">
+                    <span class="status-pill active">active</span>
+                    <strong>{{ active_sc.common_name }}</strong>
+                </div>
+                <div class="ca-details">
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Fingerprint</span>
+                        <code class="ca-value">{{ active_sc.fingerprint }}</code>
+                    </div>
+                    <div class="ca-detail-row">
+                        <span class="ca-label">SANs</span>
+                        <span class="ca-value">{{ active_sc.san_entries|join:", " }}</span>
+                    </div>
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Key Size</span>
+                        <span class="ca-value">{{ active_sc.key_size }}-bit RSA</span>
+                    </div>
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Issuing CA</span>
+                        <span class="ca-value">{{ active_sc.issuing_ca.common_name }}</span>
+                    </div>
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Valid from</span>
+                        <span class="ca-value">{{ active_sc.not_valid_before|date:"Y-m-d" }}</span>
+                    </div>
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Expires</span>
+                        <span class="ca-value">{{ active_sc.not_valid_after|date:"Y-m-d" }}</span>
+                    </div>
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Created</span>
+                        <span class="ca-value">{{ active_sc.created_at|date:"Y-m-d H:i" }}</span>
+                    </div>
+                </div>
+                <div class="ca-actions">
+                    <a href="/api/admin/pki/server-cert/{{ active_sc.pk }}/download/" class="action-btn" title="Download server certificate PEM">Download Server Cert</a>
+                    <form method="post" action="/api/admin/pki/server-cert/{{ active_sc.pk }}/" style="display:inline" class="api-action"
+                          data-method="DELETE" data-confirm="Deactivate server certificate '{{ active_sc.common_name }}'?">
+                        <button type="submit" class="action-btn danger" title="Deactivate this certificate">Deactivate</button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <p class="ca-no-active">No active server certificate.{% if active_ca %} Generate one below.{% else %} Generate a CA certificate first.{% endif %}</p>
+            {% endif %}
+
+            <div class="ca-generate-section">
+                <h4 class="ca-generate-title">Generate New Server Certificate</h4>
+                {% if active_ca %}
+                <form method="post" action="{% url 'web_ui:admin_panel' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="generate_server_cert">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="id_sc_common_name">Common Name</label>
+                            <input type="text" name="sc_common_name" id="id_sc_common_name" value="{{ hostname }}" required autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="id_sc_validity_days">Validity (days)</label>
+                            <input type="text" name="sc_validity_days" id="id_sc_validity_days" value="365" required autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="id_sc_key_size">Key Size (bits)</label>
+                            <select name="sc_key_size" id="id_sc_key_size">
+                                <option value="2048">2048</option>
+                                <option value="3072">3072</option>
+                                <option value="4096" selected>4096</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group full-width">
+                            <label for="id_sc_san_entries">Subject Alternative Names (comma-separated IPs and hostnames)</label>
+                            <input type="text" name="sc_san_entries" id="id_sc_san_entries" value="{{ default_sans }}" required autocomplete="off">
+                        </div>
+                    </div>
+                    <button type="submit" class="submit-btn" {% if active_sc %}onclick="return confirm('This will deactivate the current active server certificate:\n\n  {{ active_sc.common_name }} (expires {{ active_sc.not_valid_after|date:"Y-m-d" }})\n\nContinue?')"{% endif %}>Generate Server Certificate</button>
+                </form>
+                {% else %}
+                <p class="ca-no-active">A CA certificate is required before generating a server certificate.</p>
+                {% endif %}
+            </div>
+
+            {% if sc_history %}
+            <div class="ca-history">
+                <h4 class="ca-generate-title">Server Certificate History</h4>
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>Common Name</th>
+                            <th>Status</th>
+                            <th>Key Size</th>
+                            <th>Issuing CA</th>
+                            <th>Expires</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sc in sc_history %}
+                        <tr class="{% if not sc.is_active %}inactive{% endif %}">
+                            <td>{{ sc.common_name }}</td>
+                            <td>
+                                {% if sc.is_active %}
+                                    <span class="status-pill active">active</span>
+                                {% else %}
+                                    <span class="status-pill inactive">inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ sc.key_size }}-bit</td>
+                            <td>{{ sc.issuing_ca.common_name }}</td>
+                            <td>{{ sc.not_valid_after|date:"Y-m-d" }}</td>
+                            <td>
+                                <a href="/api/admin/pki/server-cert/{{ sc.pk }}/download/" class="action-btn" title="Download certificate PEM">Download</a>
+                                {% if not sc.is_active %}
+                                <form method="post" action="{% url 'web_ui:admin_panel' %}" style="display:inline"
+                                      onsubmit="return confirm('Permanently delete server certificate \'{{ sc.common_name }}\'?\n\nThis action cannot be undone.')">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="form_type" value="expunge_server_cert">
+                                    <input type="hidden" name="sc_id" value="{{ sc.pk }}">
+                                    <button type="submit" class="action-btn danger" title="Permanently delete this certificate">Expunge</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
     </div>
 
     <div class="modal-overlay" id="password-modal">
