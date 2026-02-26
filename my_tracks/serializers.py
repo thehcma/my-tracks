@@ -11,8 +11,8 @@ from typing import Any
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import (CertificateAuthority, Device, Location, ServerCertificate,
-                     UserProfile)
+from .models import (CertificateAuthority, ClientCertificate, Device, Location,
+                     ServerCertificate, UserProfile)
 from .utils import extract_device_id
 
 logger = logging.getLogger(__name__)
@@ -372,3 +372,35 @@ class ServerCertificateSerializer(serializers.ModelSerializer):
             'created_at',
             'certificate_pem',
         ]
+
+
+class ClientCertificateSerializer(serializers.ModelSerializer):
+    """Serializer for ClientCertificate model (public info, no private key)."""
+
+    issuing_ca_name = serializers.CharField(
+        source='issuing_ca.common_name', read_only=True
+    )
+    username = serializers.CharField(
+        source='user.username', read_only=True
+    )
+
+    class Meta:
+        model = ClientCertificate
+        fields = [
+            'id',
+            'user',
+            'username',
+            'issuing_ca',
+            'issuing_ca_name',
+            'common_name',
+            'fingerprint',
+            'serial_number',
+            'key_size',
+            'not_valid_before',
+            'not_valid_after',
+            'is_active',
+            'revoked',
+            'revoked_at',
+            'created_at',
+        ]
+        read_only_fields = fields
