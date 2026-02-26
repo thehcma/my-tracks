@@ -958,7 +958,7 @@ class ServerCertificateViewSet(viewsets.ViewSet):
             )
         common_name = common_name.strip()
 
-        validity_days_raw: Any = request.data.get('validity_days', 365)
+        validity_days_raw: Any = request.data.get('validity_days', 1825)
         try:
             validity_days = int(validity_days_raw)
         except (TypeError, ValueError):
@@ -1155,7 +1155,7 @@ class ClientCertificateViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        validity_days_raw: Any = request.data.get('validity_days', 365)
+        validity_days_raw: Any = request.data.get('validity_days', 1825)
         try:
             validity_days = int(validity_days_raw)
         except (TypeError, ValueError):

@@ -15,11 +15,13 @@ from rest_framework.test import APIClient
 
 from my_tracks.models import (CertificateAuthority, ClientCertificate,
                               ServerCertificate)
-from my_tracks.pki import (ALLOWED_KEY_SIZES, decrypt_private_key,
+from my_tracks.pki import (ALLOWED_KEY_SIZES, DEFAULT_CERT_VALIDITY_DAYS,
+                           VALIDITY_PRESETS, decrypt_private_key,
                            encrypt_private_key, generate_ca_certificate,
                            generate_client_certificate, generate_crl,
                            generate_server_certificate, get_certificate_expiry,
-                           get_certificate_fingerprint, get_certificate_sans,
+                           get_certificate_fingerprint,
+                           get_certificate_metadata, get_certificate_sans,
                            get_certificate_serial_number,
                            get_certificate_subject)
 
@@ -1272,3 +1274,212 @@ class TestClientCertificateDownload:
         """Non-admin users cannot download client certs via the admin endpoint."""
         response = auth_api_client.get('/api/admin/pki/client-certs/1/download/')
         assert_that(response.status_code, equal_to(status.HTTP_403_FORBIDDEN))
+
+
+class TestCertificateMetadata:
+    """Test get_certificate_metadata() extraction."""
+
+    def test_ca_metadata_has_cn_and_o(self) -> None:
+        """CA cert metadata should contain CN and O fields."""
+        cert_pem, _ = generate_ca_certificate(
+            common_name='Test Metadata CA', key_size=2048
+        )
+        meta = get_certificate_metadata(cert_pem)
+        assert_that(meta, has_key('CN'))
+        assert_that(meta['CN'], equal_to('Test Metadata CA'))
+        assert_that(meta, has_key('O'))
+        assert_that(meta['O'], equal_to('My Tracks'))
+
+    def test_server_cert_metadata(self) -> None:
+        """Server cert metadata should contain CN and O."""
+        ca_pem, ca_key = generate_ca_certificate(key_size=2048)
+        cert_pem, _ = generate_server_certificate(
+            ca_pem, ca_key, common_name='myhost', san_entries=['myhost'],
+            key_size=2048,
+        )
+        meta = get_certificate_metadata(cert_pem)
+        assert_that(meta['CN'], equal_to('myhost'))
+        assert_that(meta['O'], equal_to('My Tracks'))
+
+    def test_client_cert_metadata_inherits_org(self) -> None:
+        """Client cert metadata should inherit O from the CA."""
+        ca_pem, ca_key = generate_ca_certificate(key_size=2048)
+        cert_pem, _ = generate_client_certificate(
+            ca_pem, ca_key, username='alice', key_size=2048,
+        )
+        meta = get_certificate_metadata(cert_pem)
+        assert_that(meta['CN'], equal_to('alice'))
+        assert_that(meta['O'], equal_to('My Tracks'))
+
+    def test_missing_fields_not_in_metadata(self) -> None:
+        """Fields not present in the cert should not appear."""
+        cert_pem, _ = generate_ca_certificate(key_size=2048)
+        meta = get_certificate_metadata(cert_pem)
+        for absent in ('OU', 'C', 'ST', 'L'):
+            assert_that(absent not in meta, is_(True))
+
+
+class TestValidityPresets:
+    """Test the validity preset constants."""
+
+    def test_presets_are_ordered(self) -> None:
+        """Presets should be ordered 1 year to 5 years."""
+        assert_that(VALIDITY_PRESETS, has_length(5))
+        days = [d for d, _ in VALIDITY_PRESETS]
+        assert_that(days, equal_to([365, 730, 1095, 1460, 1825]))
+
+    def test_default_cert_validity_is_5_years(self) -> None:
+        """Default cert validity should be 5 years (1825 days)."""
+        assert_that(DEFAULT_CERT_VALIDITY_DAYS, equal_to(1825))
+
+
+class TestTLSHandshake:
+    """Validate that issued certificates form a proper TLS trust chain."""
+
+    def test_server_cert_verified_by_ca(self) -> None:
+        """Server certificate should be verifiable against its issuing CA."""
+        import ssl
+        import tempfile
+        ca_pem, ca_key = generate_ca_certificate(
+            common_name='TLS Test CA', key_size=2048,
+        )
+        server_pem, server_key = generate_server_certificate(
+            ca_pem, ca_key, common_name='localhost',
+            san_entries=['localhost', '127.0.0.1'], key_size=2048,
+        )
+
+        with (
+            tempfile.NamedTemporaryFile(suffix='.pem') as ca_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as server_cert_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as server_key_file,
+        ):
+            ca_file.write(ca_pem)
+            ca_file.flush()
+            server_cert_file.write(server_pem)
+            server_cert_file.flush()
+            server_key_file.write(server_key)
+            server_key_file.flush()
+
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(server_cert_file.name, server_key_file.name)
+
+            verify_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            verify_ctx.load_verify_locations(ca_file.name)
+            verify_ctx.check_hostname = False
+
+            assert_that(ctx, is_(not_none()))
+            assert_that(verify_ctx, is_(not_none()))
+
+    def test_client_cert_verified_by_ca(self) -> None:
+        """Client certificate should be verifiable against its issuing CA."""
+        import ssl
+        import tempfile
+        ca_pem, ca_key = generate_ca_certificate(
+            common_name='TLS Test CA', key_size=2048,
+        )
+        client_pem, client_key = generate_client_certificate(
+            ca_pem, ca_key, username='testuser', key_size=2048,
+        )
+
+        with (
+            tempfile.NamedTemporaryFile(suffix='.pem') as ca_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as client_cert_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as client_key_file,
+        ):
+            ca_file.write(ca_pem)
+            ca_file.flush()
+            client_cert_file.write(client_pem)
+            client_cert_file.flush()
+            client_key_file.write(client_key)
+            client_key_file.flush()
+
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            ctx.load_verify_locations(ca_file.name)
+            ctx.load_cert_chain(client_cert_file.name, client_key_file.name)
+            ctx.check_hostname = False
+
+            assert_that(ctx, is_(not_none()))
+
+    def test_full_tls_handshake(self) -> None:
+        """End-to-end TLS handshake between server and client using our certs."""
+        import socket
+        import ssl
+        import tempfile
+        import threading
+
+        ca_pem, ca_key = generate_ca_certificate(
+            common_name='Handshake CA', key_size=2048,
+        )
+        server_pem, server_key = generate_server_certificate(
+            ca_pem, ca_key, common_name='localhost',
+            san_entries=['localhost', '127.0.0.1'], key_size=2048,
+        )
+        client_pem, client_key = generate_client_certificate(
+            ca_pem, ca_key, username='handshakeuser', key_size=2048,
+        )
+
+        with (
+            tempfile.NamedTemporaryFile(suffix='.pem') as ca_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as srv_cert,
+            tempfile.NamedTemporaryFile(suffix='.pem') as srv_key_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as cli_cert,
+            tempfile.NamedTemporaryFile(suffix='.pem') as cli_key_file,
+        ):
+            for f, data in [
+                (ca_file, ca_pem), (srv_cert, server_pem),
+                (srv_key_file, server_key), (cli_cert, client_pem),
+                (cli_key_file, client_key),
+            ]:
+                f.write(data)
+                f.flush()
+
+            server_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            server_ctx.load_cert_chain(srv_cert.name, srv_key_file.name)
+            server_ctx.load_verify_locations(ca_file.name)
+            server_ctx.verify_mode = ssl.CERT_REQUIRED
+
+            client_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            client_ctx.load_verify_locations(ca_file.name)
+            client_ctx.load_cert_chain(cli_cert.name, cli_key_file.name)
+
+            server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server_sock.bind(('127.0.0.1', 0))
+            port = server_sock.getsockname()[1]
+            server_sock.listen(1)
+
+            handshake_ok = [False]
+            peer_cn = ['']
+
+            def server_thread() -> None:
+                conn, _ = server_sock.accept()
+                try:
+                    tls_conn = server_ctx.wrap_socket(conn, server_side=True)
+                    peer = tls_conn.getpeercert()
+                    if peer:
+                        for rdn in peer.get('subject', ()):
+                            for attr_type, attr_value in rdn:
+                                if attr_type == 'commonName':
+                                    peer_cn[0] = attr_value
+                    handshake_ok[0] = True
+                    tls_conn.shutdown(socket.SHUT_RDWR)
+                    tls_conn.close()
+                except Exception:
+                    pass
+                finally:
+                    server_sock.close()
+
+            t = threading.Thread(target=server_thread, daemon=True)
+            t.start()
+
+            client_sock = socket.create_connection(('127.0.0.1', port))
+            tls_client = client_ctx.wrap_socket(
+                client_sock, server_hostname='localhost'
+            )
+            tls_client.shutdown(socket.SHUT_RDWR)
+            tls_client.close()
+
+            t.join(timeout=5)
+
+            assert_that(handshake_ok[0], is_(True))
+            assert_that(peer_cn[0], equal_to('handshakeuser'))
