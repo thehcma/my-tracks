@@ -35,17 +35,33 @@ def decrypt_private_key(encrypted_data: bytes) -> bytes:
     return fernet.decrypt(encrypted_data)
 
 
+ALLOWED_KEY_SIZES = (2048, 3072, 4096)
+
+
 def generate_ca_certificate(
     common_name: str = "My Tracks CA",
     validity_days: int = 3650,
+    key_size: int = 4096,
 ) -> tuple[bytes, bytes]:
     """
     Generate a self-signed CA certificate and private key.
 
+    Args:
+        common_name: Subject Common Name for the CA certificate.
+        validity_days: Number of days the certificate is valid.
+        key_size: RSA key size in bits (2048, 3072, or 4096).
+
     Returns:
         Tuple of (certificate_pem, private_key_pem) as bytes.
+
+    Raises:
+        ValueError: If key_size is not one of the allowed values.
     """
-    key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
+    if key_size not in ALLOWED_KEY_SIZES:
+        raise ValueError(
+            f"Expected key_size in {ALLOWED_KEY_SIZES}, got {key_size}"
+        )
+    key = rsa.generate_private_key(public_exponent=65537, key_size=key_size)
 
     subject = issuer = x509.Name([
         x509.NameAttribute(NameOID.COMMON_NAME, common_name),

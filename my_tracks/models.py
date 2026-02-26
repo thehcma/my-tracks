@@ -246,6 +246,10 @@ class CertificateAuthority(models.Model):
     not_valid_after = models.DateTimeField(
         help_text="Certificate validity end"
     )
+    key_size = models.IntegerField(
+        default=4096,  # type: ignore[reportArgumentType]  # django-stubs issue
+        help_text="RSA key size in bits (2048, 3072, or 4096)"
+    )
     is_active = models.BooleanField(
         default=True,  # type: ignore[reportArgumentType]  # django-stubs issue
         help_text="Whether this is the current active CA (only one may be active)"

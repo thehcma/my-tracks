@@ -10,9 +10,9 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from my_tracks.models import CertificateAuthority
-from my_tracks.pki import (decrypt_private_key, encrypt_private_key,
-                           generate_ca_certificate, get_certificate_expiry,
-                           get_certificate_fingerprint,
+from my_tracks.pki import (ALLOWED_KEY_SIZES, decrypt_private_key,
+                           encrypt_private_key, generate_ca_certificate,
+                           get_certificate_expiry, get_certificate_fingerprint,
                            get_certificate_subject)
 
 
@@ -74,6 +74,32 @@ class TestPKICryptoUtilities:
         for part in parts:
             assert_that(len(part), equal_to(2))
 
+    def test_generate_ca_certificate_custom_key_size(self) -> None:
+        """Test CA generation with custom key size."""
+        cert_pem, _ = generate_ca_certificate(key_size=2048)
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        public_key = cert.public_key()
+        assert_that(public_key.key_size, equal_to(2048))
+
+    def test_generate_ca_certificate_default_key_size(self) -> None:
+        """Test CA generation uses 4096-bit key by default."""
+        cert_pem, _ = generate_ca_certificate()
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        public_key = cert.public_key()
+        assert_that(public_key.key_size, equal_to(4096))
+
+    def test_generate_ca_certificate_invalid_key_size(self) -> None:
+        """Test that invalid key size raises ValueError."""
+        from hamcrest import calling, raises
+        assert_that(
+            calling(generate_ca_certificate).with_args(key_size=1024),
+            raises(ValueError, "Expected key_size in"),
+        )
+
+    def test_allowed_key_sizes_constant(self) -> None:
+        """Test ALLOWED_KEY_SIZES contains expected values."""
+        assert_that(ALLOWED_KEY_SIZES, equal_to((2048, 3072, 4096)))
+
     def test_get_certificate_expiry_returns_datetime(self) -> None:
         """Test expiry extraction returns a datetime."""
         cert_pem, _ = generate_ca_certificate(validity_days=365)
@@ -87,7 +113,7 @@ class TestCertificateAuthorityModel:
 
     def test_create_ca_model(self) -> None:
         """Test creating a CA record in the database."""
-        cert_pem, key_pem = generate_ca_certificate(common_name="Test CA")
+        cert_pem, key_pem = generate_ca_certificate(common_name="Test CA", key_size=2048)
         encrypted_key = encrypt_private_key(key_pem)
 
         ca = CertificateAuthority.objects.create(
@@ -95,13 +121,31 @@ class TestCertificateAuthorityModel:
             encrypted_private_key=encrypted_key,
             common_name=get_certificate_subject(cert_pem),
             fingerprint=get_certificate_fingerprint(cert_pem),
+            key_size=2048,
             not_valid_before=get_certificate_expiry(cert_pem),
             not_valid_after=get_certificate_expiry(cert_pem),
             is_active=True,
         )
         assert_that(ca.pk, is_(not_none()))
         assert_that(ca.common_name, equal_to("Test CA"))
+        assert_that(ca.key_size, equal_to(2048))
         assert_that(ca.is_active, is_(True))
+
+    def test_create_ca_model_default_key_size(self) -> None:
+        """Test that CA model defaults to 4096-bit key size."""
+        cert_pem, key_pem = generate_ca_certificate(common_name="Default Key")
+        encrypted_key = encrypt_private_key(key_pem)
+
+        ca = CertificateAuthority.objects.create(
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypted_key,
+            common_name="Default Key",
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            not_valid_before=get_certificate_expiry(cert_pem),
+            not_valid_after=get_certificate_expiry(cert_pem),
+            is_active=True,
+        )
+        assert_that(ca.key_size, equal_to(4096))
 
     def test_ca_str_representation(self) -> None:
         """Test __str__ of CertificateAuthority."""
@@ -202,6 +246,38 @@ class TestCertificateAuthorityAPI:
             'validity_days': 99999,
         }, format='json')
         assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+
+    def test_create_ca_with_key_size(self, admin_api_client: APIClient) -> None:
+        """Test POST /api/admin/pki/ca/ with explicit key_size."""
+        response = admin_api_client.post('/api/admin/pki/ca/', {
+            'common_name': 'Small Key CA',
+            'validity_days': 365,
+            'key_size': 2048,
+        }, format='json')
+        assert_that(response.status_code, equal_to(status.HTTP_201_CREATED))
+        assert_that(response.data['key_size'], equal_to(2048))
+
+    def test_create_ca_invalid_key_size(self, admin_api_client: APIClient) -> None:
+        """Test that invalid key_size is rejected."""
+        response = admin_api_client.post('/api/admin/pki/ca/', {
+            'key_size': 1024,
+        }, format='json')
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+        assert_that(response.data['error'], contains_string('key_size'))
+
+    def test_create_ca_non_integer_key_size(self, admin_api_client: APIClient) -> None:
+        """Test that non-integer key_size is rejected."""
+        response = admin_api_client.post('/api/admin/pki/ca/', {
+            'key_size': 'abc',
+        }, format='json')
+        assert_that(response.status_code, equal_to(status.HTTP_400_BAD_REQUEST))
+        assert_that(response.data['error'], contains_string('key_size'))
+
+    def test_create_ca_default_key_size_in_response(self, admin_api_client: APIClient) -> None:
+        """Test that default key_size is 4096 in API response."""
+        response = admin_api_client.post('/api/admin/pki/ca/', {}, format='json')
+        assert_that(response.status_code, equal_to(status.HTTP_201_CREATED))
+        assert_that(response.data['key_size'], equal_to(4096))
 
     def test_create_ca_empty_common_name(self, admin_api_client: APIClient) -> None:
         """Test that empty common_name is rejected."""

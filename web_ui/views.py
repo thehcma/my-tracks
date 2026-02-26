@@ -16,6 +16,7 @@ from django.shortcuts import render
 
 from config.runtime import get_actual_mqtt_port, get_mqtt_port
 from my_tracks.models import CertificateAuthority, Location
+from my_tracks.pki import ALLOWED_KEY_SIZES
 from my_tracks.pki import encrypt_private_key as pki_encrypt_private_key
 from my_tracks.pki import (generate_ca_certificate, get_certificate_expiry,
                            get_certificate_fingerprint,
@@ -294,17 +295,23 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
             ca_cn = str(ca_cn_post).strip() if ca_cn_post is not None else 'My Tracks CA'
             ca_validity_raw = str(request.POST.get('ca_validity_days') or '3650')
 
+            ca_key_size_raw = str(request.POST.get('ca_key_size') or '4096')
+
             if not ca_cn:
                 context['ca_error'] = 'Common Name is required.'
             else:
                 try:
                     validity_days = int(ca_validity_raw)
+                    key_size = int(ca_key_size_raw)
                     if validity_days < 1 or validity_days > 36500:
                         context['ca_error'] = 'Validity must be between 1 and 36500 days.'
+                    elif key_size not in ALLOWED_KEY_SIZES:
+                        context['ca_error'] = f'Key size must be one of {ALLOWED_KEY_SIZES}.'
                     else:
                         cert_pem, key_pem = generate_ca_certificate(
                             common_name=ca_cn,
                             validity_days=validity_days,
+                            key_size=key_size,
                         )
                         encrypted_key = pki_encrypt_private_key(key_pem)
 
@@ -315,13 +322,14 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
                             encrypted_private_key=encrypted_key,
                             common_name=get_certificate_subject(cert_pem),
                             fingerprint=get_certificate_fingerprint(cert_pem),
+                            key_size=key_size,
                             not_valid_before=get_certificate_expiry(cert_pem) - timedelta(days=validity_days),
                             not_valid_after=get_certificate_expiry(cert_pem),
                             is_active=True,
                         )
                         context['ca_success'] = f"CA '{ca_cn}' generated successfully."
                 except ValueError:
-                    context['ca_error'] = 'Validity days must be a number.'
+                    context['ca_error'] = 'Validity days and key size must be a number.'
                 except Exception as e:
                     context['ca_error'] = str(e)
 

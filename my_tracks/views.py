@@ -26,7 +26,7 @@ from .auth import CommandApiKeyAuthentication, get_command_api_key
 from .models import (CertificateAuthority, Device, Location, OwnTracksMessage,
                      UserProfile)
 from .mqtt.commands import Command, CommandPublisher
-from .pki import (decrypt_private_key, encrypt_private_key,
+from .pki import (ALLOWED_KEY_SIZES, decrypt_private_key, encrypt_private_key,
                   generate_ca_certificate, get_certificate_expiry,
                   get_certificate_fingerprint, get_certificate_subject)
 from .serializers import (CertificateAuthoritySerializer,
@@ -822,9 +822,25 @@ class CertificateAuthorityViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        key_size_raw: Any = request.data.get('key_size', 4096)
+        try:
+            key_size = int(key_size_raw)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": f"Expected integer for key_size, got '{key_size_raw}'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if key_size not in ALLOWED_KEY_SIZES:
+            return Response(
+                {"error": f"Expected key_size in {ALLOWED_KEY_SIZES}, got {key_size}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         cert_pem, key_pem = generate_ca_certificate(
             common_name=common_name,
             validity_days=validity_days,
+            key_size=key_size,
         )
 
         encrypted_key = encrypt_private_key(key_pem)
@@ -836,6 +852,7 @@ class CertificateAuthorityViewSet(viewsets.ViewSet):
             encrypted_private_key=encrypted_key,
             common_name=get_certificate_subject(cert_pem),
             fingerprint=get_certificate_fingerprint(cert_pem),
+            key_size=key_size,
             not_valid_before=get_certificate_expiry(cert_pem) - timedelta(days=validity_days),
             not_valid_after=get_certificate_expiry(cert_pem),
             is_active=True,
