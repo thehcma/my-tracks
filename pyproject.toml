@@ -43,7 +43,7 @@ packages = ["config", "my_tracks"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["test_*.py", "*_test.py"]
-addopts = "-v --cov=my_tracks --cov-report=term-missing"
+addopts = "-v -n auto"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
@@ -66,4 +66,5 @@ amqtt = { git = "https://github.com/Yakifo/amqtt.git" }
 [dependency-groups]
 dev = [
     "pyhamcrest>=2.1.0",
+    "pytest-xdist>=3.8.0",
 ]
