@@ -1,6 +1,6 @@
 # My Tracks
 
-A backend server for the OwnTracks Android app, designed to receive and persist geolocation data from OwnTracks clients using Python 3.14+ with full type hints and modern features.
+A self-hosted location tracking backend for the [OwnTracks](https://owntracks.org/) Android/iOS app. Receives, persists, and visualizes geolocation data via HTTP and MQTT, with a live map UI, real-time WebSocket updates, and a PKI-based certificate management system for secure MQTT TLS.
 
 ## 🚀 Quick Start
 
@@ -35,7 +35,7 @@ curl -X POST http://localhost:8080/api/locations/ \
 - **Location Data Persistence**: Store location data with full context (latitude, longitude, timestamp, accuracy, altitude, velocity, battery, connection type)
 - **RESTful API**: Clean API endpoints for location data with filtering and pagination
 - **Device Management**: Support for multiple devices with unique identification
-- **Type Safety**: Full type hints using Python 3.12+ features
+- **Type Safety**: Full type hints using Python 3.14+ features
 - **Modern Python**: Uses dataclasses and modern Python idioms
 - **Admin Interface**: Web-based admin for data management
 - **Comprehensive Testing**: Full pytest test suite included

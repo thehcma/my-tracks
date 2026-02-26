@@ -208,7 +208,7 @@ dependencies = [
 
 ## Security Considerations
 
-1. **Authentication**: All MQTT connections require valid Django credentials
+1. **Authentication**: All MQTT connections require valid user credentials
 2. **Topic ACL**: Users can only access `owntracks/{their-user}/*`
 3. **TLS**: Phase 6 will add TLS support on port 8883
 4. **Rate limiting**: Consider adding publish rate limits

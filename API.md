@@ -1,6 +1,6 @@
 # API Documentation
 
-Complete API reference for the OwnTracks Backend.
+Complete API reference for My Tracks.
 
 ## Base URL
 

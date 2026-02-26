@@ -4,7 +4,7 @@
 
 ## Overview
 
-Evolution plan for My Tracks, a Django-based backend for the OwnTracks location tracking app.
+Evolution plan for My Tracks, a self-hosted location tracking backend for the OwnTracks Android/iOS app.
 
 **Core Goals**:
 - Persist and visualize geolocation data
