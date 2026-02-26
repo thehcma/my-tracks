@@ -1233,3 +1233,42 @@ class TestClientCertificateModel:
             not_valid_after=x509.load_pem_x509_certificate(cert_pem).not_valid_after_utc,
         )
         assert_that(ca.client_certificates.count(), equal_to(1))
+
+
+@pytest.mark.django_db
+class TestClientCertificateDownload:
+    """Test the client certificate download REST API endpoint."""
+
+    def _create_ca_and_client_cert(self, admin_api_client: APIClient) -> int:
+        """Helper that creates a CA and a client cert, returns the cert ID."""
+        admin_api_client.post(
+            '/api/admin/pki/ca/',
+            {'common_name': 'DL CA', 'key_size': 2048},
+            format='json',
+        )
+        user = User.objects.create_user(username='dluser', password='pass123')
+        resp = admin_api_client.post(
+            '/api/admin/pki/client-certs/',
+            {'user_id': user.pk, 'key_size': 2048},
+            format='json',
+        )
+        return resp.data['id']
+
+    def test_download_client_cert(self, admin_api_client: APIClient) -> None:
+        """GET /api/admin/pki/client-certs/{id}/download/ returns PEM file."""
+        cert_id = self._create_ca_and_client_cert(admin_api_client)
+        response = admin_api_client.get(f'/api/admin/pki/client-certs/{cert_id}/download/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response['Content-Type'], equal_to('application/x-pem-file'))
+        assert_that(response['Content-Disposition'], contains_string('-client.crt'))
+        assert_that(response.content.decode(), starts_with('-----BEGIN CERTIFICATE-----'))
+
+    def test_download_nonexistent_client_cert(self, admin_api_client: APIClient) -> None:
+        """Downloading a nonexistent client cert returns 404."""
+        response = admin_api_client.get('/api/admin/pki/client-certs/99999/download/')
+        assert_that(response.status_code, equal_to(status.HTTP_404_NOT_FOUND))
+
+    def test_download_forbidden_for_non_admin(self, auth_api_client: APIClient) -> None:
+        """Non-admin users cannot download client certs via the admin endpoint."""
+        response = auth_api_client.get('/api/admin/pki/client-certs/1/download/')
+        assert_that(response.status_code, equal_to(status.HTTP_403_FORBIDDEN))

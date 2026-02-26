@@ -879,6 +879,114 @@
             </div>
             {% endif %}
         </div>
+
+        <div class="admin-card">
+            <h3 class="section-title">PKI — Client Certificates</h3>
+
+            {% if cc_success %}
+            <div class="message success">{{ cc_success }}</div>
+            {% endif %}
+            {% if cc_error %}
+            <div class="message error">{{ cc_error }}</div>
+            {% endif %}
+
+            {% if client_certs %}
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Status</th>
+                        <th>Key Size</th>
+                        <th>Issuing CA</th>
+                        <th>Expires</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cc in client_certs %}
+                    <tr class="{% if cc.revoked %}inactive{% elif not cc.is_active %}inactive{% endif %}">
+                        <td>{{ cc.user.username }}</td>
+                        <td>
+                            {% if cc.revoked %}
+                                <span class="status-pill" style="background:var(--error);color:#fff">revoked</span>
+                            {% elif cc.is_active %}
+                                <span class="status-pill active">active</span>
+                            {% else %}
+                                <span class="status-pill inactive">inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ cc.key_size }}-bit</td>
+                        <td>{{ cc.issuing_ca.common_name }}</td>
+                        <td>{{ cc.not_valid_after|date:"Y-m-d" }}</td>
+                        <td>{{ cc.created_at|date:"Y-m-d H:i" }}</td>
+                        <td>
+                            <a href="/api/admin/pki/client-certs/{{ cc.pk }}/download/" class="action-btn" title="Download client certificate PEM">Download</a>
+                            {% if cc.is_active and not cc.revoked %}
+                            <form method="post" action="{% url 'web_ui:admin_panel' %}" style="display:inline"
+                                  onsubmit="return confirm('Revoke client certificate for \'{{ cc.user.username }}\'?\n\nThis will deactivate the certificate and add it to the CRL.')">
+                                {% csrf_token %}
+                                <input type="hidden" name="form_type" value="revoke_client_cert">
+                                <input type="hidden" name="cc_id" value="{{ cc.pk }}">
+                                <button type="submit" class="action-btn danger" title="Revoke this certificate">Revoke</button>
+                            </form>
+                            {% endif %}
+                            {% if not cc.is_active or cc.revoked %}
+                            <form method="post" action="{% url 'web_ui:admin_panel' %}" style="display:inline"
+                                  onsubmit="return confirm('Permanently delete client certificate for \'{{ cc.user.username }}\'?\n\nThis action cannot be undone.')">
+                                {% csrf_token %}
+                                <input type="hidden" name="form_type" value="expunge_client_cert">
+                                <input type="hidden" name="cc_id" value="{{ cc.pk }}">
+                                <button type="submit" class="action-btn danger" title="Permanently delete this certificate">Expunge</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="ca-no-active">No client certificates issued yet.</p>
+            {% endif %}
+
+            <div class="ca-generate-section">
+                <h4 class="ca-generate-title">Issue New Client Certificate</h4>
+                {% if active_ca %}
+                <form method="post" action="{% url 'web_ui:admin_panel' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="issue_client_cert">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="id_cc_user_id">User</label>
+                            <select name="cc_user_id" id="id_cc_user_id" required>
+                                <option value="">— Select user —</option>
+                                {% for u in users %}
+                                <option value="{{ u.pk }}">{{ u.username }}{% if u.first_name or u.last_name %} ({{ u.first_name }} {{ u.last_name }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="id_cc_validity_days">Validity (days)</label>
+                            <input type="text" name="cc_validity_days" id="id_cc_validity_days" value="365" required autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="id_cc_key_size">Key Size (bits)</label>
+                            <select name="cc_key_size" id="id_cc_key_size">
+                                <option value="2048">2048</option>
+                                <option value="3072">3072</option>
+                                <option value="4096" selected>4096</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="submit-btn">Issue Client Certificate</button>
+                </form>
+                {% else %}
+                <p class="ca-no-active">A CA certificate is required before issuing client certificates.</p>
+                {% endif %}
+            </div>
+        </div>
     </div>
 
     <div class="modal-overlay" id="password-modal">
