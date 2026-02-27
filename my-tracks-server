@@ -282,6 +282,12 @@ cat > "$runtime_config" << EOF
 }
 EOF
 
+# Build frontend assets (TypeScript → JavaScript/CSS)
+if [ -f "package.json" ] && command -v npm &>/dev/null; then
+    echo "🔨 Building frontend assets..."
+    npm run build --silent 2>&1 || { echo "❌ Frontend build failed"; exit 1; }
+fi
+
 # Collect static files for whitenoise (required for ASGI static file serving)
 echo "📦 Collecting static files..."
 uv run python manage.py collectstatic --noinput --clear > /dev/null 2>&1

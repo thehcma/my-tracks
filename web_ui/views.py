@@ -554,7 +554,13 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
             except ClientCertificate.DoesNotExist:
                 context['cc_error'] = 'Client certificate not found.'
 
-    users = User.objects.all().order_by('username')
+    users = list(User.objects.all().order_by('username'))
+    user_id_to_active_cert = {
+        cc.user_id: cc
+        for cc in ClientCertificate.objects.filter(is_active=True, revoked=False)
+    }
+    for u in users:
+        u.active_cert = user_id_to_active_cert.get(u.pk)  # type: ignore[attr-defined]
     context['users'] = users
 
     active_ca = CertificateAuthority.objects.filter(is_active=True).first()
@@ -585,6 +591,11 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
     context['validity_presets'] = VALIDITY_PRESETS
     context['default_cert_validity'] = DEFAULT_CERT_VALIDITY_DAYS
     context['default_ca_validity'] = DEFAULT_CA_VALIDITY_DAYS
+
+    pki_has_message = any(context.get(k) for k in (
+        'ca_success', 'ca_error', 'sc_success', 'sc_error', 'cc_success', 'cc_error',
+    ))
+    context['active_tab'] = 'pki' if pki_has_message else 'users'
 
     ips = get_all_local_ips()
     hostname = socket.gethostname()
