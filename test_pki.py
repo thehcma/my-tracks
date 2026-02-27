@@ -1,21 +1,26 @@
-"""Tests for PKI (Certificate Authority and Server Certificate) functionality."""
+"""Tests for PKI (Certificate Authority, Server Certificate, Client Certificate) functionality."""
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.x509.oid import ExtendedKeyUsageOID
+from django.contrib.auth.models import User
 from hamcrest import (assert_that, contains_string, equal_to, greater_than,
-                      has_item, has_key, has_length, is_, is_not, not_none,
-                      starts_with)
+                      has_item, has_key, has_length, instance_of, is_, is_not,
+                      not_none, starts_with)
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from my_tracks.models import CertificateAuthority, ServerCertificate
+from my_tracks.models import (CertificateAuthority, ClientCertificate,
+                              ServerCertificate)
 from my_tracks.pki import (ALLOWED_KEY_SIZES, decrypt_private_key,
                            encrypt_private_key, generate_ca_certificate,
+                           generate_client_certificate, generate_crl,
                            generate_server_certificate, get_certificate_expiry,
                            get_certificate_fingerprint, get_certificate_sans,
+                           get_certificate_serial_number,
                            get_certificate_subject)
 
 
@@ -902,3 +907,329 @@ class TestServerCertificatePermissions:
         client = APIClient()
         response = client.get('/api/admin/pki/server-cert/')
         assert_that(response.status_code, equal_to(status.HTTP_403_FORBIDDEN))
+
+
+# === Client Certificate Tests ===
+
+
+@pytest.mark.django_db
+class TestClientCertificateCrypto:
+    """Test client certificate generation and CRL functions."""
+
+    @pytest.fixture
+    def ca_pair(self) -> tuple[bytes, bytes]:
+        """Generate a CA cert+key pair for signing client certs."""
+        return generate_ca_certificate(
+            common_name="Test CA", validity_days=3650, key_size=2048
+        )
+
+    def test_generate_client_cert_returns_pem(self, ca_pair: tuple[bytes, bytes]) -> None:
+        cert_pem, key_pem = generate_client_certificate(
+            ca_pair[0], ca_pair[1], username="alice"
+        )
+        assert_that(cert_pem.decode(), starts_with("-----BEGIN CERTIFICATE-----"))
+        assert_that(key_pem.decode(), starts_with("-----BEGIN PRIVATE KEY-----"))
+
+    def test_client_cert_cn_matches_username(self, ca_pair: tuple[bytes, bytes]) -> None:
+        cert_pem, _ = generate_client_certificate(
+            ca_pair[0], ca_pair[1], username="bob"
+        )
+        assert_that(get_certificate_subject(cert_pem), equal_to("bob"))
+
+    def test_client_cert_signed_by_ca(self, ca_pair: tuple[bytes, bytes]) -> None:
+        cert_pem, _ = generate_client_certificate(
+            ca_pair[0], ca_pair[1], username="carol"
+        )
+        ca_cert = x509.load_pem_x509_certificate(ca_pair[0])
+        client_cert = x509.load_pem_x509_certificate(cert_pem)
+        assert_that(client_cert.issuer, equal_to(ca_cert.subject))
+
+    def test_client_cert_basic_constraints_not_ca(self, ca_pair: tuple[bytes, bytes]) -> None:
+        cert_pem, _ = generate_client_certificate(
+            ca_pair[0], ca_pair[1], username="dave"
+        )
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
+        assert_that(bc.value.ca, is_(False))
+
+    def test_client_cert_key_usage(self, ca_pair: tuple[bytes, bytes]) -> None:
+        cert_pem, _ = generate_client_certificate(
+            ca_pair[0], ca_pair[1], username="eve"
+        )
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        ku = cert.extensions.get_extension_for_class(x509.KeyUsage)
+        assert_that(ku.value.digital_signature, is_(True))
+        assert_that(ku.value.key_encipherment, is_(True))
+
+    def test_client_cert_extended_key_usage_client_auth(self, ca_pair: tuple[bytes, bytes]) -> None:
+        cert_pem, _ = generate_client_certificate(
+            ca_pair[0], ca_pair[1], username="frank"
+        )
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        eku = cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage)
+        assert_that(
+            list(eku.value), has_item(ExtendedKeyUsageOID.CLIENT_AUTH)
+        )
+
+    def test_client_cert_custom_key_size(self, ca_pair: tuple[bytes, bytes]) -> None:
+        cert_pem, _ = generate_client_certificate(
+            ca_pair[0], ca_pair[1], username="grace", key_size=2048
+        )
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        assert_that(cert.public_key().key_size, equal_to(2048))
+
+    def test_client_cert_custom_validity(self, ca_pair: tuple[bytes, bytes]) -> None:
+        cert_pem, _ = generate_client_certificate(
+            ca_pair[0], ca_pair[1], username="heidi", validity_days=30
+        )
+        cert = x509.load_pem_x509_certificate(cert_pem)
+        delta = cert.not_valid_after_utc - cert.not_valid_before_utc
+        assert_that(delta.days, equal_to(30))
+
+    def test_client_cert_invalid_key_size(self, ca_pair: tuple[bytes, bytes]) -> None:
+        from hamcrest import calling, raises
+        assert_that(
+            calling(generate_client_certificate).with_args(
+                ca_pair[0], ca_pair[1], username="ivan", key_size=1024
+            ),
+            raises(ValueError, "Expected key_size in"),
+        )
+
+    def test_client_cert_empty_username(self, ca_pair: tuple[bytes, bytes]) -> None:
+        from hamcrest import calling, raises
+        assert_that(
+            calling(generate_client_certificate).with_args(
+                ca_pair[0], ca_pair[1], username=""
+            ),
+            raises(ValueError, "Expected a non-empty username"),
+        )
+
+    def test_client_cert_whitespace_username(self, ca_pair: tuple[bytes, bytes]) -> None:
+        from hamcrest import calling, raises
+        assert_that(
+            calling(generate_client_certificate).with_args(
+                ca_pair[0], ca_pair[1], username="   "
+            ),
+            raises(ValueError, "Expected a non-empty username"),
+        )
+
+    def test_client_cert_inherits_org_from_ca(self, ca_pair: tuple[bytes, bytes]) -> None:
+        """Organization in client cert must match the CA's Organization."""
+        cert_pem, _ = generate_client_certificate(
+            ca_pair[0], ca_pair[1], username="judy"
+        )
+        ca_cert = x509.load_pem_x509_certificate(ca_pair[0])
+        ca_org = ca_cert.subject.get_attributes_for_oid(
+            x509.oid.NameOID.ORGANIZATION_NAME
+        )
+        client_cert = x509.load_pem_x509_certificate(cert_pem)
+        client_org = client_cert.subject.get_attributes_for_oid(
+            x509.oid.NameOID.ORGANIZATION_NAME
+        )
+        assert_that(len(client_org), equal_to(1))
+        assert_that(str(client_org[0].value), equal_to(str(ca_org[0].value)))
+
+    def test_get_certificate_serial_number(self, ca_pair: tuple[bytes, bytes]) -> None:
+        cert_pem, _ = generate_client_certificate(
+            ca_pair[0], ca_pair[1], username="karl"
+        )
+        serial = get_certificate_serial_number(cert_pem)
+        assert_that(serial, instance_of(int))
+        assert_that(serial, greater_than(0))
+
+
+@pytest.mark.django_db
+class TestCRLGeneration:
+    """Test Certificate Revocation List generation."""
+
+    @pytest.fixture
+    def ca_pair(self) -> tuple[bytes, bytes]:
+        return generate_ca_certificate(
+            common_name="CRL Test CA", validity_days=3650, key_size=2048
+        )
+
+    def test_generate_empty_crl(self, ca_pair: tuple[bytes, bytes]) -> None:
+        crl_pem = generate_crl(ca_pair[0], ca_pair[1], revoked_entries=[])
+        assert_that(crl_pem.decode(), contains_string("-----BEGIN X509 CRL-----"))
+
+    def test_crl_signed_by_ca(self, ca_pair: tuple[bytes, bytes]) -> None:
+        crl_pem = generate_crl(ca_pair[0], ca_pair[1], revoked_entries=[])
+        crl = x509.load_pem_x509_crl(crl_pem)
+        ca_cert = x509.load_pem_x509_certificate(ca_pair[0])
+        assert_that(crl.issuer, equal_to(ca_cert.subject))
+
+    def test_crl_with_revoked_entries(self, ca_pair: tuple[bytes, bytes]) -> None:
+        now = datetime.now(UTC)
+        entries = [(12345, now), (67890, now)]
+        crl_pem = generate_crl(ca_pair[0], ca_pair[1], revoked_entries=entries)
+        crl = x509.load_pem_x509_crl(crl_pem)
+        revoked = list(crl)
+        assert_that(revoked, has_length(2))
+
+    def test_crl_contains_correct_serial(self, ca_pair: tuple[bytes, bytes]) -> None:
+        now = datetime.now(UTC)
+        entries = [(99999, now)]
+        crl_pem = generate_crl(ca_pair[0], ca_pair[1], revoked_entries=entries)
+        crl = x509.load_pem_x509_crl(crl_pem)
+        revoked = list(crl)
+        assert_that(revoked[0].serial_number, equal_to(99999))
+
+    def test_crl_validity_period(self, ca_pair: tuple[bytes, bytes]) -> None:
+        crl_pem = generate_crl(
+            ca_pair[0], ca_pair[1], revoked_entries=[], validity_days=7
+        )
+        crl = x509.load_pem_x509_crl(crl_pem)
+        next_update = crl.next_update_utc
+        last_update = crl.last_update_utc
+        assert_that(next_update, is_(not_none()))
+        assert_that(last_update, is_(not_none()))
+        assert_that((next_update - last_update).days, equal_to(7))  # type: ignore[operator]
+
+    def test_crl_from_client_cert(self, ca_pair: tuple[bytes, bytes]) -> None:
+        """End-to-end: generate client cert, extract serial, put in CRL."""
+        cert_pem, _ = generate_client_certificate(
+            ca_pair[0], ca_pair[1], username="revoked_user", key_size=2048
+        )
+        serial = get_certificate_serial_number(cert_pem)
+        now = datetime.now(UTC)
+        crl_pem = generate_crl(
+            ca_pair[0], ca_pair[1], revoked_entries=[(serial, now)]
+        )
+        crl = x509.load_pem_x509_crl(crl_pem)
+        revoked = list(crl)
+        assert_that(revoked, has_length(1))
+        assert_that(revoked[0].serial_number, equal_to(serial))
+
+
+@pytest.mark.django_db
+class TestClientCertificateModel:
+    """Test the ClientCertificate model."""
+
+    @pytest.fixture
+    def ca_and_user(self, db: Any) -> tuple[CertificateAuthority, User, bytes, bytes]:
+        """Create a CA and a user for client cert tests."""
+        cert_pem, key_pem = generate_ca_certificate(
+            common_name="Model Test CA", key_size=2048
+        )
+        ca = CertificateAuthority.objects.create(
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypt_private_key(key_pem),
+            common_name="Model Test CA",
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            key_size=2048,
+            not_valid_before=x509.load_pem_x509_certificate(cert_pem).not_valid_before_utc,
+            not_valid_after=x509.load_pem_x509_certificate(cert_pem).not_valid_after_utc,
+            is_active=True,
+        )
+        user = User.objects.create_user(username="certuser", password="pass123")
+        return ca, user, cert_pem, key_pem
+
+    def test_create_client_cert_model(
+        self, ca_and_user: tuple[CertificateAuthority, User, bytes, bytes]
+    ) -> None:
+        ca, user, ca_cert_pem, ca_key_pem = ca_and_user
+        cert_pem, key_pem = generate_client_certificate(
+            ca_cert_pem, ca_key_pem, username=str(user.username), key_size=2048
+        )
+        client_cert = ClientCertificate.objects.create(
+            user=user,
+            issuing_ca=ca,
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypt_private_key(key_pem),
+            common_name=user.username,
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            serial_number=hex(get_certificate_serial_number(cert_pem)),
+            key_size=2048,
+            not_valid_before=x509.load_pem_x509_certificate(cert_pem).not_valid_before_utc,
+            not_valid_after=x509.load_pem_x509_certificate(cert_pem).not_valid_after_utc,
+        )
+        assert_that(client_cert.pk, is_(not_none()))
+        assert_that(client_cert.common_name, equal_to("certuser"))
+        assert_that(client_cert.is_active, is_(True))
+        assert_that(client_cert.revoked, is_(False))
+
+    def test_client_cert_str_active(
+        self, ca_and_user: tuple[CertificateAuthority, User, bytes, bytes]
+    ) -> None:
+        ca, user, ca_cert_pem, ca_key_pem = ca_and_user
+        cert_pem, key_pem = generate_client_certificate(
+            ca_cert_pem, ca_key_pem, username=str(user.username), key_size=2048
+        )
+        client_cert = ClientCertificate.objects.create(
+            user=user,
+            issuing_ca=ca,
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypt_private_key(key_pem),
+            common_name=user.username,
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            serial_number=hex(get_certificate_serial_number(cert_pem)),
+            key_size=2048,
+            not_valid_before=x509.load_pem_x509_certificate(cert_pem).not_valid_before_utc,
+            not_valid_after=x509.load_pem_x509_certificate(cert_pem).not_valid_after_utc,
+        )
+        assert_that(str(client_cert), equal_to("certuser (active)"))
+
+    def test_client_cert_str_revoked(
+        self, ca_and_user: tuple[CertificateAuthority, User, bytes, bytes]
+    ) -> None:
+        ca, user, ca_cert_pem, ca_key_pem = ca_and_user
+        cert_pem, key_pem = generate_client_certificate(
+            ca_cert_pem, ca_key_pem, username=str(user.username), key_size=2048
+        )
+        client_cert = ClientCertificate.objects.create(
+            user=user,
+            issuing_ca=ca,
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypt_private_key(key_pem),
+            common_name=user.username,
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            serial_number=hex(get_certificate_serial_number(cert_pem)),
+            key_size=2048,
+            not_valid_before=x509.load_pem_x509_certificate(cert_pem).not_valid_before_utc,
+            not_valid_after=x509.load_pem_x509_certificate(cert_pem).not_valid_after_utc,
+            revoked=True,
+            is_active=False,
+        )
+        assert_that(str(client_cert), equal_to("certuser (revoked)"))
+
+    def test_client_cert_fk_to_user(
+        self, ca_and_user: tuple[CertificateAuthority, User, bytes, bytes]
+    ) -> None:
+        ca, user, ca_cert_pem, ca_key_pem = ca_and_user
+        cert_pem, key_pem = generate_client_certificate(
+            ca_cert_pem, ca_key_pem, username=str(user.username), key_size=2048
+        )
+        ClientCertificate.objects.create(
+            user=user,
+            issuing_ca=ca,
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypt_private_key(key_pem),
+            common_name=user.username,
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            serial_number=hex(get_certificate_serial_number(cert_pem)),
+            key_size=2048,
+            not_valid_before=x509.load_pem_x509_certificate(cert_pem).not_valid_before_utc,
+            not_valid_after=x509.load_pem_x509_certificate(cert_pem).not_valid_after_utc,
+        )
+        assert_that(user.client_certificates.count(), equal_to(1))
+
+    def test_client_cert_fk_to_ca(
+        self, ca_and_user: tuple[CertificateAuthority, User, bytes, bytes]
+    ) -> None:
+        ca, user, ca_cert_pem, ca_key_pem = ca_and_user
+        cert_pem, key_pem = generate_client_certificate(
+            ca_cert_pem, ca_key_pem, username=str(user.username), key_size=2048
+        )
+        ClientCertificate.objects.create(
+            user=user,
+            issuing_ca=ca,
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypt_private_key(key_pem),
+            common_name=user.username,
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            serial_number=hex(get_certificate_serial_number(cert_pem)),
+            key_size=2048,
+            not_valid_before=x509.load_pem_x509_certificate(cert_pem).not_valid_before_utc,
+            not_valid_after=x509.load_pem_x509_certificate(cert_pem).not_valid_after_utc,
+        )
+        assert_that(ca.client_certificates.count(), equal_to(1))

@@ -1,9 +1,10 @@
 """
 PKI utilities for certificate generation and key encryption.
 
-Provides functions for generating CA and server certificates, and
-encrypting/decrypting private keys at rest using Fernet symmetric encryption
-derived from Django's SECRET_KEY.
+Provides functions for generating CA, server, and client certificates,
+generating Certificate Revocation Lists (CRLs), and encrypting/decrypting
+private keys at rest using Fernet symmetric encryption derived from
+Django's SECRET_KEY.
 """
 import base64
 import hashlib
@@ -266,3 +267,162 @@ def generate_server_certificate(
     )
 
     return cert_pem, key_pem
+
+
+def generate_client_certificate(
+    ca_cert_pem: bytes,
+    ca_key_pem: bytes,
+    username: str,
+    validity_days: int = 365,
+    key_size: int = 4096,
+) -> tuple[bytes, bytes]:
+    """
+    Generate a client certificate signed by the given CA.
+
+    The certificate embeds the username in the Common Name (CN) field
+    so the MQTT broker can map client certificates back to users.
+
+    Args:
+        ca_cert_pem: CA certificate in PEM format.
+        ca_key_pem: CA private key in PEM format (unencrypted).
+        username: Username to embed in the certificate's CN.
+        validity_days: Number of days the certificate is valid.
+        key_size: RSA key size in bits (2048, 3072, or 4096).
+
+    Returns:
+        Tuple of (certificate_pem, private_key_pem) as bytes.
+
+    Raises:
+        ValueError: If key_size is not allowed or username is empty.
+    """
+    if key_size not in ALLOWED_KEY_SIZES:
+        raise ValueError(
+            f"Expected key_size in {ALLOWED_KEY_SIZES}, got {key_size}"
+        )
+    if not username or not username.strip():
+        raise ValueError("Expected a non-empty username")
+
+    ca_cert = x509.load_pem_x509_certificate(ca_cert_pem)
+    ca_key = serialization.load_pem_private_key(ca_key_pem, password=None)
+    if not isinstance(ca_key, RSAPrivateKey):
+        raise ValueError("Expected RSA private key for CA")
+
+    client_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=key_size
+    )
+
+    ca_org_attrs = ca_cert.subject.get_attributes_for_oid(
+        NameOID.ORGANIZATION_NAME
+    )
+    org_name = str(ca_org_attrs[0].value) if ca_org_attrs else "My Tracks"
+
+    subject = x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, username),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, org_name),
+    ])
+
+    now = datetime.now(UTC)
+    builder = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(ca_cert.subject)
+        .public_key(client_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now)
+        .not_valid_after(now + timedelta(days=validity_days))
+        .add_extension(
+            x509.BasicConstraints(ca=False, path_length=None),
+            critical=True,
+        )
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                key_encipherment=True,
+                content_commitment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=False,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .add_extension(
+            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]),
+            critical=False,
+        )
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(
+                ca_key.public_key()
+            ),
+            critical=False,
+        )
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(
+                client_key.public_key()
+            ),
+            critical=False,
+        )
+    )
+
+    cert = builder.sign(ca_key, hashes.SHA256())
+
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+    key_pem = client_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+
+    return cert_pem, key_pem
+
+
+def generate_crl(
+    ca_cert_pem: bytes,
+    ca_key_pem: bytes,
+    revoked_entries: list[tuple[int, datetime]],
+    validity_days: int = 30,
+) -> bytes:
+    """
+    Generate a Certificate Revocation List (CRL) signed by the CA.
+
+    Args:
+        ca_cert_pem: CA certificate in PEM format.
+        ca_key_pem: CA private key in PEM format (unencrypted).
+        revoked_entries: List of (serial_number, revocation_datetime) tuples.
+        validity_days: Days until the CRL expires (next update).
+
+    Returns:
+        CRL in PEM format as bytes.
+    """
+    ca_cert = x509.load_pem_x509_certificate(ca_cert_pem)
+    ca_key = serialization.load_pem_private_key(ca_key_pem, password=None)
+    if not isinstance(ca_key, RSAPrivateKey):
+        raise ValueError("Expected RSA private key for CA")
+
+    now = datetime.now(UTC)
+    builder = (
+        x509.CertificateRevocationListBuilder()
+        .issuer_name(ca_cert.subject)
+        .last_update(now)
+        .next_update(now + timedelta(days=validity_days))
+    )
+
+    for serial_number, revocation_time in revoked_entries:
+        revoked_cert = (
+            x509.RevokedCertificateBuilder()
+            .serial_number(serial_number)
+            .revocation_date(revocation_time)
+            .build()
+        )
+        builder = builder.add_revoked_certificate(revoked_cert)
+
+    crl = builder.sign(ca_key, hashes.SHA256())
+    return crl.public_bytes(serialization.Encoding.PEM)
+
+
+def get_certificate_serial_number(cert_pem: bytes) -> int:
+    """Get the serial number of a PEM-encoded certificate."""
+    cert = x509.load_pem_x509_certificate(cert_pem)
+    return cert.serial_number
