@@ -1006,6 +1006,53 @@
                 <p class="ca-no-active">A CA certificate is required before issuing client certificates.</p>
                 {% endif %}
             </div>
+
+            <hr class="section-divider">
+
+            <h3 class="section-title">PKI — Certificate Revocation List</h3>
+
+            {% if active_ca %}
+            <div class="crl-meta" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+                <span style="font-size:0.9rem; color:var(--text-muted);">
+                    {% if revoked_certs %}
+                        {{ revoked_certs|length }} revoked certificate{{ revoked_certs|length|pluralize }}
+                    {% else %}
+                        No certificates have been revoked
+                    {% endif %}
+                </span>
+                {% if revoked_certs %}
+                <a href="/api/admin/pki/crl/" class="action-btn" title="Download the signed CRL in PEM format">Download CRL</a>
+                {% endif %}
+            </div>
+
+            {% if revoked_certs %}
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Common Name</th>
+                        <th>Serial Number</th>
+                        <th>Revoked At</th>
+                        <th>Original Expiry</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rc in revoked_certs %}
+                    <tr class="inactive">
+                        <td>{{ rc.user.username }}</td>
+                        <td>{{ rc.common_name }}</td>
+                        <td style="font-family:monospace; font-size:0.8rem;">{{ rc.serial_number }}</td>
+                        <td>{{ rc.revoked_at|date:"Y-m-d H:i" }}</td>
+                        <td>{{ rc.not_valid_after|date:"Y-m-d" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% else %}
+            <p class="ca-no-active">A CA certificate is required to generate a CRL.</p>
+            {% endif %}
         </div>
     </div>
 

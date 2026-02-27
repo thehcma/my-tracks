@@ -667,7 +667,8 @@ class TestProfileCertificates:
         from datetime import timedelta
 
         from my_tracks.models import CertificateAuthority, ClientCertificate
-        from my_tracks.pki import (encrypt_private_key, generate_ca_certificate,
+        from my_tracks.pki import (encrypt_private_key,
+                                   generate_ca_certificate,
                                    generate_client_certificate,
                                    get_certificate_expiry,
                                    get_certificate_fingerprint,
@@ -1774,3 +1775,115 @@ class TestAdminPanelClientCert:
         content = response.content.decode('utf-8')
         assert_that(content, contains_string('/api/admin/pki/client-certs/'))
         assert_that(content, contains_string('/download/'))
+
+
+@pytest.mark.django_db
+class TestAdminPanelCRL:
+    """Test the Certificate Revocation List section of the admin panel."""
+
+    def _create_ca(self, client: Client) -> None:
+        client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'CRL Test CA',
+            'ca_validity_days': '3650',
+            'ca_key_size': '2048',
+        })
+
+    def _create_user(self, username: str = 'crluser') -> User:
+        return User.objects.create_user(username=username, password='testpass123')
+
+    def _issue_and_revoke(self, client: Client, user: User) -> None:
+        from my_tracks.models import ClientCertificate
+        client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+        cert = ClientCertificate.objects.get(user=user, is_active=True)
+        client.post('/admin-panel/', {
+            'form_type': 'revoke_client_cert',
+            'cc_id': str(cert.pk),
+        })
+
+    def test_crl_section_header_present(self, admin_logged_in_client: Client) -> None:
+        """Admin panel should show the CRL section header."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Certificate Revocation List'))
+
+    def test_crl_section_requires_ca(self, admin_logged_in_client: Client) -> None:
+        """Without a CA, CRL section should show a message."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('A CA certificate is required to generate a CRL'))
+
+    def test_crl_empty_state(self, admin_logged_in_client: Client) -> None:
+        """With a CA but no revocations, show 'No certificates have been revoked'."""
+        self._create_ca(admin_logged_in_client)
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('No certificates have been revoked'))
+
+    def test_crl_no_download_when_empty(self, admin_logged_in_client: Client) -> None:
+        """Download CRL button should not appear when there are no revocations."""
+        self._create_ca(admin_logged_in_client)
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, not_(contains_string('Download CRL')))
+
+    def test_crl_shows_revoked_cert(self, admin_logged_in_client: Client) -> None:
+        """Revoked certificate should appear in the CRL table."""
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+        self._issue_and_revoke(admin_logged_in_client, user)
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('1 revoked certificate'))
+        assert_that(content, contains_string('crluser'))
+
+    def test_crl_shows_serial_number(self, admin_logged_in_client: Client) -> None:
+        """CRL table should display the certificate serial number."""
+        from my_tracks.models import ClientCertificate
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+        self._issue_and_revoke(admin_logged_in_client, user)
+
+        cert = ClientCertificate.objects.get(user=user)
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string(cert.serial_number))
+
+    def test_crl_download_link_present(self, admin_logged_in_client: Client) -> None:
+        """Download CRL button should appear when revocations exist."""
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+        self._issue_and_revoke(admin_logged_in_client, user)
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Download CRL'))
+        assert_that(content, contains_string('/api/admin/pki/crl/'))
+
+    def test_crl_multiple_revoked_certs(self, admin_logged_in_client: Client) -> None:
+        """Multiple revoked certs should all appear with correct count."""
+        self._create_ca(admin_logged_in_client)
+        user_a = self._create_user('alice')
+        user_b = self._create_user('bob')
+        self._issue_and_revoke(admin_logged_in_client, user_a)
+        self._issue_and_revoke(admin_logged_in_client, user_b)
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('2 revoked certificates'))
+        assert_that(content, contains_string('alice'))
+        assert_that(content, contains_string('bob'))
+
+    def test_crl_not_visible_to_regular_user(self) -> None:
+        """Regular users should not be able to access the admin panel."""
+        user = User.objects.create_user(username='regular', password='testpass123')
+        client = Client()
+        client.login(username='regular', password='testpass123')
+        response = client.get('/admin-panel/')
+        assert_that(response.status_code, is_(equal_to(status.HTTP_302_FOUND)))
