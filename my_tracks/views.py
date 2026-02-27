@@ -1270,6 +1270,26 @@ class ClientCertificateViewSet(viewsets.ViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @action(detail=True, methods=['get'], url_path='download')
+    def download(self, request: Request, pk: str | None = None) -> DjangoHttpResponse | Response:
+        """Download the client certificate PEM file."""
+        try:
+            cert = ClientCertificate.objects.get(pk=pk)
+        except ClientCertificate.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid client cert ID, got '{pk}'"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        response = DjangoHttpResponse(
+            cert.certificate_pem,
+            content_type='application/x-pem-file',
+        )
+        response['Content-Disposition'] = (
+            f'attachment; filename="{cert.common_name}-client.crt"'
+        )
+        return response
+
 
 class CRLViewSet(viewsets.ViewSet):
     """Download the current Certificate Revocation List."""

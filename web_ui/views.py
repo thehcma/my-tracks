@@ -13,15 +13,19 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.utils import timezone as tz
 
 from config.runtime import get_actual_mqtt_port, get_mqtt_port
-from my_tracks.models import CertificateAuthority, Location, ServerCertificate
+from my_tracks.models import (CertificateAuthority, ClientCertificate,
+                              Location, ServerCertificate)
 from my_tracks.pki import ALLOWED_KEY_SIZES
 from my_tracks.pki import decrypt_private_key as pki_decrypt_private_key
 from my_tracks.pki import encrypt_private_key as pki_encrypt_private_key
 from my_tracks.pki import (generate_ca_certificate,
+                           generate_client_certificate,
                            generate_server_certificate, get_certificate_expiry,
                            get_certificate_fingerprint, get_certificate_sans,
+                           get_certificate_serial_number,
                            get_certificate_subject)
 
 logger = logging.getLogger(__name__)
@@ -419,6 +423,95 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
             except ServerCertificate.DoesNotExist:
                 context['sc_error'] = 'Server certificate not found.'
 
+        if form_type == 'issue_client_cert':
+            cc_user_id_raw = request.POST.get('cc_user_id', '')
+            cc_user_id = str(cc_user_id_raw).strip() if cc_user_id_raw else ''
+            cc_validity_raw = str(request.POST.get('cc_validity_days') or '365')
+            cc_key_size_raw = str(request.POST.get('cc_key_size') or '4096')
+
+            active_ca_obj = CertificateAuthority.objects.filter(is_active=True).first()
+
+            if not active_ca_obj:
+                context['cc_error'] = 'No active CA certificate. Generate a CA first.'
+            elif not cc_user_id:
+                context['cc_error'] = 'Please select a user.'
+            else:
+                try:
+                    target_user = User.objects.get(pk=int(cc_user_id))
+                    validity_days = int(cc_validity_raw)
+                    key_size = int(cc_key_size_raw)
+                    if validity_days < 1 or validity_days > 36500:
+                        context['cc_error'] = 'Validity must be between 1 and 36500 days.'
+                    elif key_size not in ALLOWED_KEY_SIZES:
+                        context['cc_error'] = f'Key size must be one of {ALLOWED_KEY_SIZES}.'
+                    else:
+                        ca_key_pem = pki_decrypt_private_key(
+                            bytes(active_ca_obj.encrypted_private_key)
+                        )
+                        cert_pem, client_key_pem = generate_client_certificate(
+                            ca_cert_pem=active_ca_obj.certificate_pem.encode(),
+                            ca_key_pem=ca_key_pem,
+                            username=str(target_user.username),
+                            validity_days=validity_days,
+                            key_size=key_size,
+                        )
+                        encrypted_key = pki_encrypt_private_key(client_key_pem)
+
+                        ClientCertificate.objects.filter(
+                            user=target_user, is_active=True
+                        ).update(is_active=False)
+
+                        serial = get_certificate_serial_number(cert_pem)
+
+                        ClientCertificate.objects.create(
+                            user=target_user,
+                            issuing_ca=active_ca_obj,
+                            certificate_pem=cert_pem.decode(),
+                            encrypted_private_key=encrypted_key,
+                            common_name=get_certificate_subject(cert_pem),
+                            fingerprint=get_certificate_fingerprint(cert_pem),
+                            serial_number=hex(serial),
+                            key_size=key_size,
+                            not_valid_before=get_certificate_expiry(cert_pem) - timedelta(days=validity_days),
+                            not_valid_after=get_certificate_expiry(cert_pem),
+                            is_active=True,
+                        )
+                        context['cc_success'] = f"Client certificate issued for '{target_user.username}'."
+                except User.DoesNotExist:
+                    context['cc_error'] = 'Selected user not found.'
+                except ValueError:
+                    context['cc_error'] = 'Validity days and key size must be a number.'
+                except Exception as e:
+                    context['cc_error'] = str(e)
+
+        if form_type == 'revoke_client_cert':
+            cc_id = request.POST.get('cc_id')
+            try:
+                cc = ClientCertificate.objects.get(pk=cc_id)
+                if cc.revoked:
+                    context['cc_error'] = f"Certificate for '{cc.common_name}' is already revoked."
+                else:
+                    cc.revoked = True
+                    cc.is_active = False
+                    cc.revoked_at = tz.now()
+                    cc.save()
+                    context['cc_success'] = f"Certificate for '{cc.common_name}' revoked."
+            except ClientCertificate.DoesNotExist:
+                context['cc_error'] = 'Client certificate not found.'
+
+        if form_type == 'expunge_client_cert':
+            cc_id = request.POST.get('cc_id')
+            try:
+                cc = ClientCertificate.objects.get(pk=cc_id)
+                if cc.is_active and not cc.revoked:
+                    context['cc_error'] = 'Cannot expunge an active certificate. Revoke it first.'
+                else:
+                    cc_name = cc.common_name
+                    cc.delete()
+                    context['cc_success'] = f"Certificate for '{cc_name}' permanently deleted."
+            except ClientCertificate.DoesNotExist:
+                context['cc_error'] = 'Client certificate not found.'
+
     users = User.objects.all().order_by('username')
     context['users'] = users
 
@@ -429,6 +522,10 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
     active_sc = ServerCertificate.objects.filter(is_active=True).first()
     context['active_sc'] = active_sc
     context['sc_history'] = list(ServerCertificate.objects.all()[:10])
+
+    context['client_certs'] = list(
+        ClientCertificate.objects.select_related('user', 'issuing_ca').all()[:50]
+    )
 
     ips = get_all_local_ips()
     hostname = socket.gethostname()
