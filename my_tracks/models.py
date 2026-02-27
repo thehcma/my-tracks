@@ -333,6 +333,87 @@ class ServerCertificate(models.Model):
         return f"{self.common_name}{active}"
 
 
+class ClientCertificate(models.Model):
+    """
+    Client certificate issued to a user, signed by the active CA.
+
+    Used for MQTT TLS client authentication. The CN embeds the username
+    so the broker can map certificates to users for topic ACL.
+    """
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='client_certificates',
+        help_text="The user this certificate was issued to"
+    )
+    issuing_ca = models.ForeignKey(
+        CertificateAuthority,
+        on_delete=models.CASCADE,
+        related_name='client_certificates',
+        help_text="The CA that signed this client certificate"
+    )
+    certificate_pem = models.TextField(
+        help_text="Client certificate in PEM format"
+    )
+    encrypted_private_key = models.BinaryField(
+        help_text="Client private key encrypted at rest (Fernet)"
+    )
+    common_name = models.CharField(
+        max_length=200,
+        help_text="Subject Common Name (matches the username)"
+    )
+    fingerprint = models.CharField(
+        max_length=100,
+        help_text="SHA-256 fingerprint of the client certificate"
+    )
+    serial_number = models.CharField(
+        max_length=100,
+        help_text="Certificate serial number (hex)"
+    )
+    key_size = models.IntegerField(
+        default=4096,  # type: ignore[reportArgumentType]
+        help_text="RSA key size in bits (2048, 3072, or 4096)"
+    )
+    not_valid_before = models.DateTimeField(
+        help_text="Certificate validity start"
+    )
+    not_valid_after = models.DateTimeField(
+        help_text="Certificate validity end"
+    )
+    is_active = models.BooleanField(
+        default=True,  # type: ignore[reportArgumentType]
+        help_text="Whether this certificate is currently active"
+    )
+    revoked = models.BooleanField(
+        default=False,  # type: ignore[reportArgumentType]
+        help_text="Whether this certificate has been revoked"
+    )
+    revoked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this certificate was revoked"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this certificate was issued"
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Client Certificate'
+        verbose_name_plural = 'Client Certificates'
+
+    def __str__(self) -> str:
+        """Return string representation of the client certificate."""
+        status_label = ""
+        if self.revoked:
+            status_label = " (revoked)"
+        elif self.is_active:
+            status_label = " (active)"
+        return f"{self.common_name}{status_label}"
+
+
 class UserProfile(models.Model):
     """
     Extended profile for users.
