@@ -23,15 +23,18 @@ from rest_framework.response import Response
 
 from .apps import get_mqtt_broker, get_mqtt_event_loop
 from .auth import CommandApiKeyAuthentication, get_command_api_key
-from .models import (CertificateAuthority, Device, Location, OwnTracksMessage,
-                     ServerCertificate, UserProfile)
+from .models import (CertificateAuthority, ClientCertificate, Device, Location,
+                     OwnTracksMessage, ServerCertificate, UserProfile)
 from .mqtt.commands import Command, CommandPublisher
 from .pki import (ALLOWED_KEY_SIZES, decrypt_private_key, encrypt_private_key,
-                  generate_ca_certificate, generate_server_certificate,
+                  generate_ca_certificate, generate_client_certificate,
+                  generate_crl, generate_server_certificate,
                   get_certificate_expiry, get_certificate_fingerprint,
-                  get_certificate_sans, get_certificate_subject)
+                  get_certificate_sans, get_certificate_serial_number,
+                  get_certificate_subject)
 from .serializers import (CertificateAuthoritySerializer,
-                          ChangePasswordSerializer, DeviceSerializer,
+                          ChangePasswordSerializer,
+                          ClientCertificateSerializer, DeviceSerializer,
                           LocationSerializer, ServerCertificateSerializer,
                           UserProfileSerializer, UserSerializer)
 from .utils import extract_device_id
@@ -1106,4 +1109,202 @@ class ServerCertificateViewSet(viewsets.ViewSet):
             {"detail": f"Server cert '{cert_name}' permanently deleted."},
             status=status.HTTP_200_OK,
         )
+
+
+class ClientCertificateViewSet(viewsets.ViewSet):
+    """
+    Admin-only client certificate management for MQTT TLS.
+
+    Endpoints:
+    - GET  /api/admin/pki/client-certs/           — list all client certificates
+    - POST /api/admin/pki/client-certs/           — issue certificate for a user
+    - POST /api/admin/pki/client-certs/{id}/revoke/ — revoke a certificate
+    - DELETE /api/admin/pki/client-certs/{id}/expunge/ — permanently delete revoked cert
+    - GET  /api/admin/pki/crl/                     — download current CRL
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def list(self, request: Request) -> Response:
+        """List all client certificates, most recent first."""
+        certs = ClientCertificate.objects.select_related('user', 'issuing_ca').all()
+        serializer = ClientCertificateSerializer(certs, many=True)
+        return Response(serializer.data)
+
+    def create(self, request: Request) -> Response:
+        """Issue a new client certificate for a user, signed by the active CA."""
+        active_ca = CertificateAuthority.objects.filter(is_active=True).first()
+        if active_ca is None:
+            return Response(
+                {"error": "No active CA certificate. Generate a CA first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user_id: Any = request.data.get('user_id')
+        if user_id is None:
+            return Response(
+                {"error": "Expected 'user_id' field"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            target_user = User.objects.get(pk=int(user_id))
+        except (User.DoesNotExist, ValueError, TypeError):
+            return Response(
+                {"error": f"Expected valid user ID, got '{user_id}'"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        validity_days_raw: Any = request.data.get('validity_days', 365)
+        try:
+            validity_days = int(validity_days_raw)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": f"Expected integer for validity_days, got '{validity_days_raw}'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if validity_days < 1 or validity_days > 36500:
+            return Response(
+                {"error": f"Expected validity_days between 1 and 36500, got {validity_days}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        key_size_raw: Any = request.data.get('key_size', 4096)
+        try:
+            key_size = int(key_size_raw)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": f"Expected integer for key_size, got '{key_size_raw}'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if key_size not in ALLOWED_KEY_SIZES:
+            return Response(
+                {"error": f"Expected key_size in {ALLOWED_KEY_SIZES}, got {key_size}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ca_key_pem = decrypt_private_key(bytes(active_ca.encrypted_private_key))
+
+        cert_pem, client_key_pem = generate_client_certificate(
+            ca_cert_pem=active_ca.certificate_pem.encode(),
+            ca_key_pem=ca_key_pem,
+            username=str(target_user.username),
+            validity_days=validity_days,
+            key_size=key_size,
+        )
+
+        encrypted_key = encrypt_private_key(client_key_pem)
+
+        ClientCertificate.objects.filter(
+            user=target_user, is_active=True
+        ).update(is_active=False)
+
+        serial = get_certificate_serial_number(cert_pem)
+
+        client_cert = ClientCertificate.objects.create(
+            user=target_user,
+            issuing_ca=active_ca,
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypted_key,
+            common_name=get_certificate_subject(cert_pem),
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            serial_number=hex(serial),
+            key_size=key_size,
+            not_valid_before=get_certificate_expiry(cert_pem) - timedelta(days=validity_days),
+            not_valid_after=get_certificate_expiry(cert_pem),
+            is_active=True,
+        )
+
+        serializer = ClientCertificateSerializer(client_cert)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='revoke')
+    def revoke(self, request: Request, pk: str | None = None) -> Response:
+        """Revoke a client certificate."""
+        try:
+            cert = ClientCertificate.objects.get(pk=pk)
+        except ClientCertificate.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid client cert ID, got '{pk}'"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if cert.revoked:
+            return Response(
+                {"error": f"Certificate for '{cert.common_name}' is already revoked"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cert.revoked = True
+        cert.is_active = False
+        cert.revoked_at = timezone.now()
+        cert.save()
+        return Response(
+            {"detail": f"Certificate for '{cert.common_name}' has been revoked."},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=['delete'], url_path='expunge')
+    def expunge(self, request: Request, pk: str | None = None) -> Response:
+        """Permanently delete a revoked or inactive client certificate."""
+        try:
+            cert = ClientCertificate.objects.get(pk=pk)
+        except ClientCertificate.DoesNotExist:
+            return Response(
+                {"error": f"Expected valid client cert ID, got '{pk}'"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if cert.is_active and not cert.revoked:
+            return Response(
+                {"error": "Cannot expunge an active certificate. Revoke it first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cert_name = cert.common_name
+        cert.delete()
+        return Response(
+            {"detail": f"Certificate for '{cert_name}' permanently deleted."},
+            status=status.HTTP_200_OK,
+        )
+
+
+class CRLViewSet(viewsets.ViewSet):
+    """Download the current Certificate Revocation List."""
+
+    permission_classes = [AllowAny]
+
+    def list(self, request: Request) -> DjangoHttpResponse | Response:
+        """Generate and return the current CRL signed by the active CA."""
+        active_ca = CertificateAuthority.objects.filter(is_active=True).first()
+        if active_ca is None:
+            return Response(
+                {"error": "No active CA certificate"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        revoked_certs = ClientCertificate.objects.filter(
+            issuing_ca=active_ca, revoked=True
+        )
+        revoked_entries: list[tuple[int, datetime]] = []
+        for cert in revoked_certs:
+            serial = int(cert.serial_number, 16)
+            revoked_at = cert.revoked_at or cert.created_at
+            revoked_entries.append((serial, revoked_at))
+
+        ca_key_pem = decrypt_private_key(bytes(active_ca.encrypted_private_key))
+        crl_pem = generate_crl(
+            ca_cert_pem=active_ca.certificate_pem.encode(),
+            ca_key_pem=ca_key_pem,
+            revoked_entries=revoked_entries,
+        )
+
+        http_response = DjangoHttpResponse(
+            crl_pem,
+            content_type='application/x-pem-file',
+        )
+        http_response['Content-Disposition'] = 'attachment; filename="my-tracks.crl"'
+        return http_response
 
