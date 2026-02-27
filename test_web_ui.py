@@ -659,6 +659,125 @@ class TestProfilePage:
 
 
 @pytest.mark.django_db
+class TestProfileCertificates:
+    """Test the certificates section of the user profile page."""
+
+    def _create_ca_and_client_cert(self, user: User) -> None:
+        """Helper to create a CA and issue a client cert for a user."""
+        from datetime import timedelta
+
+        from my_tracks.models import CertificateAuthority, ClientCertificate
+        from my_tracks.pki import (encrypt_private_key, generate_ca_certificate,
+                                   generate_client_certificate,
+                                   get_certificate_expiry,
+                                   get_certificate_fingerprint,
+                                   get_certificate_serial_number)
+
+        ca_cert_pem, ca_key_pem = generate_ca_certificate(
+            common_name='Profile Test CA', key_size=2048
+        )
+        ca = CertificateAuthority.objects.create(
+            certificate_pem=ca_cert_pem.decode(),
+            encrypted_private_key=encrypt_private_key(ca_key_pem),
+            common_name='Profile Test CA',
+            fingerprint=get_certificate_fingerprint(ca_cert_pem),
+            key_size=2048,
+            not_valid_before=get_certificate_expiry(ca_cert_pem) - timedelta(days=3650),
+            not_valid_after=get_certificate_expiry(ca_cert_pem),
+            is_active=True,
+        )
+
+        cert_pem, key_pem = generate_client_certificate(
+            ca_cert_pem, ca_key_pem, username=str(user.username), key_size=2048
+        )
+        ClientCertificate.objects.create(
+            user=user,
+            issuing_ca=ca,
+            certificate_pem=cert_pem.decode(),
+            encrypted_private_key=encrypt_private_key(key_pem),
+            common_name=str(user.username),
+            fingerprint=get_certificate_fingerprint(cert_pem),
+            serial_number=hex(get_certificate_serial_number(cert_pem)),
+            key_size=2048,
+            not_valid_before=get_certificate_expiry(cert_pem) - timedelta(days=365),
+            not_valid_after=get_certificate_expiry(cert_pem),
+            is_active=True,
+        )
+
+    def test_profile_shows_certificates_section(self, logged_in_client: Client) -> None:
+        """Profile page should contain the Certificates section header."""
+        response = logged_in_client.get('/profile/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Certificates'))
+
+    def test_no_cert_message_when_none_issued(self, logged_in_client: Client) -> None:
+        """When no cert exists, show a prompt to contact admin."""
+        response = logged_in_client.get('/profile/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Contact an administrator'))
+
+    def test_no_ca_message_when_none_exists(self, logged_in_client: Client) -> None:
+        """When no CA exists, show appropriate message."""
+        response = logged_in_client.get('/profile/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('No CA certificate'))
+
+    def test_profile_shows_client_cert_details(self, logged_in_client: Client, user: User) -> None:
+        """When user has a cert, show its details."""
+        self._create_ca_and_client_cert(user)
+        response = logged_in_client.get('/profile/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Client Certificate'))
+        assert_that(content, contains_string(str(user.username)))
+        assert_that(content, contains_string('Fingerprint'))
+        assert_that(content, contains_string('Download Client Cert'))
+
+    def test_profile_shows_ca_cert_details(self, logged_in_client: Client, user: User) -> None:
+        """When a CA exists, show its details and download link."""
+        self._create_ca_and_client_cert(user)
+        response = logged_in_client.get('/profile/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('CA Certificate'))
+        assert_that(content, contains_string('Profile Test CA'))
+        assert_that(content, contains_string('Download CA Cert'))
+
+    def test_download_my_cert(self, logged_in_client: Client, user: User) -> None:
+        """Authenticated user can download their own client cert PEM."""
+        self._create_ca_and_client_cert(user)
+        response = logged_in_client.get('/profile/download-cert/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response['Content-Type'], equal_to('application/x-pem-file'))
+        assert_that(response['Content-Disposition'], contains_string('-client.crt'))
+        assert_that(response.content.decode(), contains_string('BEGIN CERTIFICATE'))
+
+    def test_download_my_cert_no_cert(self, logged_in_client: Client) -> None:
+        """Downloading cert when none exists returns 404."""
+        response = logged_in_client.get('/profile/download-cert/')
+        assert_that(response.status_code, equal_to(404))
+
+    def test_download_ca_cert(self, logged_in_client: Client, user: User) -> None:
+        """Authenticated user can download the CA cert PEM."""
+        self._create_ca_and_client_cert(user)
+        response = logged_in_client.get('/profile/download-ca/')
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        assert_that(response['Content-Type'], equal_to('application/x-pem-file'))
+        assert_that(response['Content-Disposition'], contains_string('.crt'))
+        assert_that(response.content.decode(), contains_string('BEGIN CERTIFICATE'))
+
+    def test_download_ca_cert_no_ca(self, logged_in_client: Client) -> None:
+        """Downloading CA cert when none exists returns 404."""
+        response = logged_in_client.get('/profile/download-ca/')
+        assert_that(response.status_code, equal_to(404))
+
+    def test_download_requires_authentication(self) -> None:
+        """Download endpoints redirect unauthenticated users."""
+        client = Client()
+        for url in ['/profile/download-cert/', '/profile/download-ca/']:
+            response = client.get(url)
+            assert_that(response.status_code, equal_to(status.HTTP_302_FOUND))
+
+
+@pytest.mark.django_db
 class TestSessionConfiguration:
     """Test session configuration settings."""
 

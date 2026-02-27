@@ -187,7 +187,7 @@ def home(request: HttpRequest) -> HttpResponse:
 @login_required
 def profile(request: HttpRequest) -> HttpResponse:
     """User profile page for editing name, email, and password."""
-    context: dict[str, str] = {}
+    context: dict[str, object] = {}
 
     if request.method == 'POST':
         form_type = request.POST.get('form_type')
@@ -221,7 +221,39 @@ def profile(request: HttpRequest) -> HttpResponse:
                 except ValidationError as e:
                     context['password_error'] = ' '.join(e.messages)
 
+    active_cert = ClientCertificate.objects.filter(
+        user=request.user, is_active=True, revoked=False
+    ).select_related('issuing_ca').first()
+    context['active_cert'] = active_cert
+
+    active_ca = CertificateAuthority.objects.filter(is_active=True).first()
+    context['active_ca'] = active_ca
+
     return render(request, 'web_ui/profile.html', context)
+
+
+@login_required
+def download_my_cert(request: HttpRequest) -> HttpResponse:
+    """Download the authenticated user's active client certificate PEM."""
+    cert = ClientCertificate.objects.filter(
+        user=request.user, is_active=True, revoked=False
+    ).first()
+    if cert is None:
+        return HttpResponse(b'No active client certificate', status=404)
+    response = HttpResponse(cert.certificate_pem.encode(), content_type='application/x-pem-file')
+    response['Content-Disposition'] = f'attachment; filename="{cert.common_name}-client.crt"'
+    return response
+
+
+@login_required
+def download_ca_cert(request: HttpRequest) -> HttpResponse:
+    """Download the active CA certificate PEM for OwnTracks configuration."""
+    ca = CertificateAuthority.objects.filter(is_active=True).first()
+    if ca is None:
+        return HttpResponse(b'No active CA certificate', status=404)
+    response = HttpResponse(ca.certificate_pem.encode(), content_type='application/x-pem-file')
+    response['Content-Disposition'] = f'attachment; filename="{ca.common_name}.crt"'
+    return response
 
 
 @login_required
