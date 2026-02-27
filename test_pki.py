@@ -1483,3 +1483,215 @@ class TestTLSHandshake:
 
             assert_that(handshake_ok[0], is_(True))
             assert_that(peer_cn[0], equal_to('handshakeuser'))
+
+    @staticmethod
+    def _write_and_flush(
+        file_data_pairs: list[tuple[Any, bytes]],
+    ) -> None:
+        for f, data in file_data_pairs:
+            f.write(data)
+            f.flush()
+
+    def test_revoked_client_cert_rejected(self) -> None:
+        """Server with CRL checking must reject a revoked client certificate.
+
+        In TLS 1.3 the client-side handshake may complete before the server
+        verifies the client cert, so we assert on the server-side error and
+        confirm the client cannot actually exchange data.
+        """
+        import socket
+        import ssl
+        import tempfile
+        import threading
+
+        ca_pem, ca_key = generate_ca_certificate(
+            common_name='CRL Reject CA', key_size=2048,
+        )
+        server_pem, server_key = generate_server_certificate(
+            ca_pem, ca_key, common_name='localhost',
+            san_entries=['localhost', '127.0.0.1'], key_size=2048,
+        )
+        client_pem, client_key = generate_client_certificate(
+            ca_pem, ca_key, username='revokeduser', key_size=2048,
+        )
+
+        serial = get_certificate_serial_number(client_pem)
+        crl_pem = generate_crl(
+            ca_pem, ca_key,
+            revoked_entries=[(serial, datetime.now(UTC))],
+        )
+
+        ca_plus_crl = ca_pem + b'\n' + crl_pem
+
+        with (
+            tempfile.NamedTemporaryFile(suffix='.pem') as ca_crl_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as srv_cert,
+            tempfile.NamedTemporaryFile(suffix='.pem') as srv_key_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as ca_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as cli_cert,
+            tempfile.NamedTemporaryFile(suffix='.pem') as cli_key_file,
+        ):
+            self._write_and_flush([
+                (ca_crl_file, ca_plus_crl),
+                (srv_cert, server_pem), (srv_key_file, server_key),
+                (ca_file, ca_pem),
+                (cli_cert, client_pem), (cli_key_file, client_key),
+            ])
+
+            server_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            server_ctx.load_cert_chain(srv_cert.name, srv_key_file.name)
+            server_ctx.load_verify_locations(cafile=ca_crl_file.name)
+            server_ctx.verify_mode = ssl.CERT_REQUIRED
+            server_ctx.verify_flags |= ssl.VERIFY_CRL_CHECK_LEAF
+
+            client_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            client_ctx.load_verify_locations(ca_file.name)
+            client_ctx.load_cert_chain(cli_cert.name, cli_key_file.name)
+
+            server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server_sock.bind(('127.0.0.1', 0))
+            port = server_sock.getsockname()[1]
+            server_sock.listen(1)
+
+            server_error: list[Exception | None] = [None]
+
+            def server_thread() -> None:
+                conn, _ = server_sock.accept()
+                try:
+                    server_ctx.wrap_socket(conn, server_side=True)
+                except Exception as exc:
+                    server_error[0] = exc
+                finally:
+                    conn.close()
+                    server_sock.close()
+
+            t = threading.Thread(target=server_thread, daemon=True)
+            t.start()
+
+            client_sock = socket.create_connection(('127.0.0.1', port))
+            tls_client: ssl.SSLSocket | None = None
+            client_io_failed = False
+            try:
+                tls_client = client_ctx.wrap_socket(
+                    client_sock, server_hostname='localhost',
+                )
+                tls_client.send(b'ping')
+                tls_client.recv(1)
+            except (ssl.SSLError, OSError):
+                client_io_failed = True
+            finally:
+                if tls_client:
+                    tls_client.close()
+                else:
+                    client_sock.close()
+
+            t.join(timeout=5)
+
+            assert_that(
+                server_error[0], is_(instance_of(ssl.SSLError)),
+                'Server must reject revoked client cert',
+            )
+            assert_that(
+                str(server_error[0]), contains_string('certificate revoked'),
+            )
+            assert_that(
+                client_io_failed, is_(True),
+                'Client must not be able to exchange data after revocation',
+            )
+
+    def test_non_revoked_client_passes_with_crl(self) -> None:
+        """A valid client cert must still be accepted when CRL checking is on."""
+        import socket
+        import ssl
+        import tempfile
+        import threading
+
+        ca_pem, ca_key = generate_ca_certificate(
+            common_name='CRL Pass CA', key_size=2048,
+        )
+        server_pem, server_key = generate_server_certificate(
+            ca_pem, ca_key, common_name='localhost',
+            san_entries=['localhost', '127.0.0.1'], key_size=2048,
+        )
+        good_pem, good_key = generate_client_certificate(
+            ca_pem, ca_key, username='gooduser', key_size=2048,
+        )
+        bad_pem, _ = generate_client_certificate(
+            ca_pem, ca_key, username='baduser', key_size=2048,
+        )
+
+        bad_serial = get_certificate_serial_number(bad_pem)
+        crl_pem = generate_crl(
+            ca_pem, ca_key,
+            revoked_entries=[(bad_serial, datetime.now(UTC))],
+        )
+
+        ca_plus_crl = ca_pem + b'\n' + crl_pem
+
+        with (
+            tempfile.NamedTemporaryFile(suffix='.pem') as ca_crl_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as srv_cert,
+            tempfile.NamedTemporaryFile(suffix='.pem') as srv_key_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as ca_file,
+            tempfile.NamedTemporaryFile(suffix='.pem') as cli_cert,
+            tempfile.NamedTemporaryFile(suffix='.pem') as cli_key_file,
+        ):
+            self._write_and_flush([
+                (ca_crl_file, ca_plus_crl),
+                (srv_cert, server_pem), (srv_key_file, server_key),
+                (ca_file, ca_pem),
+                (cli_cert, good_pem), (cli_key_file, good_key),
+            ])
+
+            server_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            server_ctx.load_cert_chain(srv_cert.name, srv_key_file.name)
+            server_ctx.load_verify_locations(cafile=ca_crl_file.name)
+            server_ctx.verify_mode = ssl.CERT_REQUIRED
+            server_ctx.verify_flags |= ssl.VERIFY_CRL_CHECK_LEAF
+
+            client_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            client_ctx.load_verify_locations(ca_file.name)
+            client_ctx.load_cert_chain(cli_cert.name, cli_key_file.name)
+
+            server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server_sock.bind(('127.0.0.1', 0))
+            port = server_sock.getsockname()[1]
+            server_sock.listen(1)
+
+            handshake_ok = [False]
+            peer_cn = ['']
+
+            def server_thread() -> None:
+                conn, _ = server_sock.accept()
+                try:
+                    tls_conn = server_ctx.wrap_socket(conn, server_side=True)
+                    peer = tls_conn.getpeercert()
+                    if peer:
+                        for rdn in peer.get('subject', ()):
+                            for attr_type, attr_value in rdn:
+                                if attr_type == 'commonName':
+                                    peer_cn[0] = attr_value
+                    handshake_ok[0] = True
+                    tls_conn.shutdown(socket.SHUT_RDWR)
+                    tls_conn.close()
+                except Exception:
+                    pass
+                finally:
+                    server_sock.close()
+
+            t = threading.Thread(target=server_thread, daemon=True)
+            t.start()
+
+            client_sock = socket.create_connection(('127.0.0.1', port))
+            tls_client = client_ctx.wrap_socket(
+                client_sock, server_hostname='localhost',
+            )
+            tls_client.shutdown(socket.SHUT_RDWR)
+            tls_client.close()
+
+            t.join(timeout=5)
+
+            assert_that(handshake_ok[0], is_(True))
+            assert_that(peer_cn[0], equal_to('gooduser'))
