@@ -625,6 +625,12 @@
                     <strong>{{ active_ca.common_name }}</strong>
                 </div>
                 <div class="ca-details">
+                    {% if active_ca_meta %}
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Subject</span>
+                        <span class="ca-value">{% for key, val in active_ca_meta.items %}{{ key }}={{ val }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+                    </div>
+                    {% endif %}
                     <div class="ca-detail-row">
                         <span class="ca-label">Fingerprint</span>
                         <code class="ca-value">{{ active_ca.fingerprint }}</code>
@@ -752,6 +758,12 @@
                     <strong>{{ active_sc.common_name }}</strong>
                 </div>
                 <div class="ca-details">
+                    {% if active_sc_meta %}
+                    <div class="ca-detail-row">
+                        <span class="ca-label">Subject</span>
+                        <span class="ca-value">{% for key, val in active_sc_meta.items %}{{ key }}={{ val }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+                    </div>
+                    {% endif %}
                     <div class="ca-detail-row">
                         <span class="ca-label">Fingerprint</span>
                         <code class="ca-value">{{ active_sc.fingerprint }}</code>
@@ -805,8 +817,12 @@
                             <input type="text" name="sc_common_name" id="id_sc_common_name" value="{{ hostname }}" required autocomplete="off">
                         </div>
                         <div class="form-group">
-                            <label for="id_sc_validity_days">Validity (days)</label>
-                            <input type="text" name="sc_validity_days" id="id_sc_validity_days" value="365" required autocomplete="off">
+                            <label for="id_sc_validity_days">Validity</label>
+                            <select name="sc_validity_days" id="id_sc_validity_days">
+                                {% for days, label in validity_presets %}
+                                <option value="{{ days }}" {% if days == default_cert_validity %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                     </div>
                     <div class="form-row">
@@ -966,8 +982,12 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="id_cc_validity_days">Validity (days)</label>
-                            <input type="text" name="cc_validity_days" id="id_cc_validity_days" value="365" required autocomplete="off">
+                            <label for="id_cc_validity_days">Validity</label>
+                            <select name="cc_validity_days" id="id_cc_validity_days">
+                                {% for days, label in validity_presets %}
+                                <option value="{{ days }}" {% if days == default_cert_validity %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                     </div>
                     <div class="form-row">

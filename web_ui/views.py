@@ -18,13 +18,15 @@ from django.utils import timezone as tz
 from config.runtime import get_actual_mqtt_port, get_mqtt_port
 from my_tracks.models import (CertificateAuthority, ClientCertificate,
                               Location, ServerCertificate)
-from my_tracks.pki import ALLOWED_KEY_SIZES
+from my_tracks.pki import (ALLOWED_KEY_SIZES, DEFAULT_CA_VALIDITY_DAYS,
+                           DEFAULT_CERT_VALIDITY_DAYS, VALIDITY_PRESETS)
 from my_tracks.pki import decrypt_private_key as pki_decrypt_private_key
 from my_tracks.pki import encrypt_private_key as pki_encrypt_private_key
 from my_tracks.pki import (generate_ca_certificate,
                            generate_client_certificate,
                            generate_server_certificate, get_certificate_expiry,
-                           get_certificate_fingerprint, get_certificate_sans,
+                           get_certificate_fingerprint,
+                           get_certificate_metadata, get_certificate_sans,
                            get_certificate_serial_number,
                            get_certificate_subject)
 
@@ -225,9 +227,17 @@ def profile(request: HttpRequest) -> HttpResponse:
         user=request.user, is_active=True, revoked=False
     ).select_related('issuing_ca').first()
     context['active_cert'] = active_cert
+    if active_cert:
+        context['cert_meta'] = get_certificate_metadata(
+            active_cert.certificate_pem.encode()
+        )
 
     active_ca = CertificateAuthority.objects.filter(is_active=True).first()
     context['active_ca'] = active_ca
+    if active_ca:
+        context['ca_meta'] = get_certificate_metadata(
+            active_ca.certificate_pem.encode()
+        )
 
     return render(request, 'web_ui/profile.html', context)
 
@@ -387,7 +397,7 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
         if form_type == 'generate_server_cert':
             sc_cn_post = request.POST.get('sc_common_name')
             sc_cn = str(sc_cn_post).strip() if sc_cn_post is not None else ''
-            sc_validity_raw = str(request.POST.get('sc_validity_days') or '365')
+            sc_validity_raw = str(request.POST.get('sc_validity_days') or str(DEFAULT_CERT_VALIDITY_DAYS))
             sc_key_size_raw = str(request.POST.get('sc_key_size') or '4096')
             sc_sans_raw = str(request.POST.get('sc_san_entries') or '')
             sc_san_list = [s.strip() for s in sc_sans_raw.split(',') if s.strip()]
@@ -458,7 +468,7 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
         if form_type == 'issue_client_cert':
             cc_user_id_raw = request.POST.get('cc_user_id', '')
             cc_user_id = str(cc_user_id_raw).strip() if cc_user_id_raw else ''
-            cc_validity_raw = str(request.POST.get('cc_validity_days') or '365')
+            cc_validity_raw = str(request.POST.get('cc_validity_days') or str(DEFAULT_CERT_VALIDITY_DAYS))
             cc_key_size_raw = str(request.POST.get('cc_key_size') or '4096')
 
             active_ca_obj = CertificateAuthority.objects.filter(is_active=True).first()
@@ -549,15 +559,27 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
 
     active_ca = CertificateAuthority.objects.filter(is_active=True).first()
     context['active_ca'] = active_ca
+    if active_ca:
+        context['active_ca_meta'] = get_certificate_metadata(
+            active_ca.certificate_pem.encode()
+        )
     context['ca_history'] = list(CertificateAuthority.objects.all()[:10])
 
     active_sc = ServerCertificate.objects.filter(is_active=True).first()
     context['active_sc'] = active_sc
+    if active_sc:
+        context['active_sc_meta'] = get_certificate_metadata(
+            active_sc.certificate_pem.encode()
+        )
     context['sc_history'] = list(ServerCertificate.objects.all()[:10])
 
     context['client_certs'] = list(
         ClientCertificate.objects.select_related('user', 'issuing_ca').all()[:50]
     )
+
+    context['validity_presets'] = VALIDITY_PRESETS
+    context['default_cert_validity'] = DEFAULT_CERT_VALIDITY_DAYS
+    context['default_ca_validity'] = DEFAULT_CA_VALIDITY_DAYS
 
     ips = get_all_local_ips()
     hostname = socket.gethostname()
