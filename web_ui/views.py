@@ -576,6 +576,11 @@ def admin_panel(request: HttpRequest) -> HttpResponse:
     context['client_certs'] = list(
         ClientCertificate.objects.select_related('user', 'issuing_ca').all()[:50]
     )
+    context['revoked_certs'] = list(
+        ClientCertificate.objects.filter(revoked=True)
+        .select_related('user')
+        .order_by('-revoked_at')[:50]
+    )
 
     context['validity_presets'] = VALIDITY_PRESETS
     context['default_cert_validity'] = DEFAULT_CERT_VALIDITY_DAYS
