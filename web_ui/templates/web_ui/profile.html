@@ -414,10 +414,12 @@
                         <span class="status-pill active">active</span>
                         <strong>Client Certificate</strong>
                     </div>
+                    {% if cert_meta %}
                     <div class="cert-detail-row">
-                        <span class="cert-label">Common Name</span>
-                        <span class="cert-value">{{ active_cert.common_name }}</span>
+                        <span class="cert-label">Subject</span>
+                        <span class="cert-value">{% for key, val in cert_meta.items %}{{ key }}={{ val }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
                     </div>
+                    {% endif %}
                     <div class="cert-detail-row">
                         <span class="cert-label">Fingerprint</span>
                         <span class="cert-value"><code>{{ active_cert.fingerprint }}</code></span>
@@ -451,10 +453,12 @@
                     <div class="cert-card-header">
                         <strong>CA Certificate</strong>
                     </div>
+                    {% if ca_meta %}
                     <div class="cert-detail-row">
-                        <span class="cert-label">Name</span>
-                        <span class="cert-value">{{ active_ca.common_name }}</span>
+                        <span class="cert-label">Subject</span>
+                        <span class="cert-value">{% for key, val in ca_meta.items %}{{ key }}={{ val }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
                     </div>
+                    {% endif %}
                     <div class="cert-detail-row">
                         <span class="cert-label">Fingerprint</span>
                         <span class="cert-value"><code>{{ active_ca.fingerprint }}</code></span>

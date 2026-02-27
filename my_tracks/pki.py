@@ -40,6 +40,17 @@ def decrypt_private_key(encrypted_data: bytes) -> bytes:
 
 ALLOWED_KEY_SIZES = (2048, 3072, 4096)
 
+VALIDITY_PRESETS: list[tuple[int, str]] = [
+    (365, '1 year'),
+    (730, '2 years'),
+    (1095, '3 years'),
+    (1460, '4 years'),
+    (1825, '5 years'),
+]
+
+DEFAULT_CERT_VALIDITY_DAYS = 1825
+DEFAULT_CA_VALIDITY_DAYS = 3650
+
 
 def generate_ca_certificate(
     common_name: str = "My Tracks CA",
@@ -159,7 +170,7 @@ def generate_server_certificate(
     ca_key_pem: bytes,
     common_name: str,
     san_entries: list[str],
-    validity_days: int = 365,
+    validity_days: int = DEFAULT_CERT_VALIDITY_DAYS,
     key_size: int = 4096,
 ) -> tuple[bytes, bytes]:
     """
@@ -273,7 +284,7 @@ def generate_client_certificate(
     ca_cert_pem: bytes,
     ca_key_pem: bytes,
     username: str,
-    validity_days: int = 365,
+    validity_days: int = DEFAULT_CERT_VALIDITY_DAYS,
     key_size: int = 4096,
 ) -> tuple[bytes, bytes]:
     """
@@ -426,3 +437,29 @@ def get_certificate_serial_number(cert_pem: bytes) -> int:
     """Get the serial number of a PEM-encoded certificate."""
     cert = x509.load_pem_x509_certificate(cert_pem)
     return cert.serial_number
+
+
+_OID_TO_LABEL: dict[x509.ObjectIdentifier, str] = {
+    NameOID.COMMON_NAME: 'CN',
+    NameOID.ORGANIZATION_NAME: 'O',
+    NameOID.ORGANIZATIONAL_UNIT_NAME: 'OU',
+    NameOID.COUNTRY_NAME: 'C',
+    NameOID.STATE_OR_PROVINCE_NAME: 'ST',
+    NameOID.LOCALITY_NAME: 'L',
+}
+
+
+def get_certificate_metadata(cert_pem: bytes) -> dict[str, str]:
+    """
+    Extract human-readable subject metadata from a PEM certificate.
+
+    Returns a dict mapping standard abbreviations (CN, O, OU, C, ST, L)
+    to their values, only for fields present in the certificate subject.
+    """
+    cert = x509.load_pem_x509_certificate(cert_pem)
+    metadata: dict[str, str] = {}
+    for oid, label in _OID_TO_LABEL.items():
+        attrs = cert.subject.get_attributes_for_oid(oid)
+        if attrs:
+            metadata[label] = str(attrs[0].value)
+    return metadata
