@@ -35,7 +35,7 @@
 
         .profile-container {
             width: 100%;
-            max-width: 480px;
+            max-width: 560px;
             padding: 2rem;
         }
 
@@ -213,6 +213,103 @@
             text-align: center;
             margin-top: 1.5rem;
         }
+
+        .cert-section {
+            margin-top: 0;
+        }
+
+        .cert-card {
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1rem;
+        }
+
+        .cert-card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .cert-card-header strong {
+            font-size: 0.95rem;
+        }
+
+        .cert-detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.3rem 0;
+            font-size: 0.8rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .cert-detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .cert-label {
+            color: var(--text-muted);
+            flex-shrink: 0;
+            margin-right: 1rem;
+        }
+
+        .cert-value {
+            text-align: right;
+            word-break: break-all;
+        }
+
+        .cert-value code {
+            font-size: 0.75rem;
+            color: var(--accent);
+        }
+
+        .cert-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .cert-btn {
+            display: inline-block;
+            padding: 0.4rem 0.8rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .cert-btn:hover {
+            background: var(--accent-hover);
+            color: white;
+        }
+
+        .cert-none {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .status-pill {
+            display: inline-block;
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 2px 8px;
+            border-radius: 8px;
+        }
+
+        .status-pill.active {
+            background: rgba(39, 174, 96, 0.2);
+            color: #27ae60;
+        }
     </style>
 </head>
 <body>
@@ -305,6 +402,75 @@
                 </div>
                 <button type="submit" class="submit-btn">Change Password</button>
             </form>
+
+            <hr class="section-divider">
+
+            <div class="cert-section">
+                <h3 class="section-title">Certificates</h3>
+
+                {% if active_cert %}
+                <div class="cert-card">
+                    <div class="cert-card-header">
+                        <span class="status-pill active">active</span>
+                        <strong>Client Certificate</strong>
+                    </div>
+                    <div class="cert-detail-row">
+                        <span class="cert-label">Common Name</span>
+                        <span class="cert-value">{{ active_cert.common_name }}</span>
+                    </div>
+                    <div class="cert-detail-row">
+                        <span class="cert-label">Fingerprint</span>
+                        <span class="cert-value"><code>{{ active_cert.fingerprint }}</code></span>
+                    </div>
+                    <div class="cert-detail-row">
+                        <span class="cert-label">Key Size</span>
+                        <span class="cert-value">{{ active_cert.key_size }}-bit RSA</span>
+                    </div>
+                    <div class="cert-detail-row">
+                        <span class="cert-label">Issuing CA</span>
+                        <span class="cert-value">{{ active_cert.issuing_ca.common_name }}</span>
+                    </div>
+                    <div class="cert-detail-row">
+                        <span class="cert-label">Valid from</span>
+                        <span class="cert-value">{{ active_cert.not_valid_before|date:"Y-m-d" }}</span>
+                    </div>
+                    <div class="cert-detail-row">
+                        <span class="cert-label">Expires</span>
+                        <span class="cert-value">{{ active_cert.not_valid_after|date:"Y-m-d" }}</span>
+                    </div>
+                    <div class="cert-actions">
+                        <a href="{% url 'web_ui:download_my_cert' %}" class="cert-btn">Download Client Cert</a>
+                    </div>
+                </div>
+                {% else %}
+                <p class="cert-none">No client certificate has been issued for your account. Contact an administrator to request one.</p>
+                {% endif %}
+
+                {% if active_ca %}
+                <div class="cert-card">
+                    <div class="cert-card-header">
+                        <strong>CA Certificate</strong>
+                    </div>
+                    <div class="cert-detail-row">
+                        <span class="cert-label">Name</span>
+                        <span class="cert-value">{{ active_ca.common_name }}</span>
+                    </div>
+                    <div class="cert-detail-row">
+                        <span class="cert-label">Fingerprint</span>
+                        <span class="cert-value"><code>{{ active_ca.fingerprint }}</code></span>
+                    </div>
+                    <div class="cert-detail-row">
+                        <span class="cert-label">Expires</span>
+                        <span class="cert-value">{{ active_ca.not_valid_after|date:"Y-m-d" }}</span>
+                    </div>
+                    <div class="cert-actions">
+                        <a href="{% url 'web_ui:download_ca_cert' %}" class="cert-btn">Download CA Cert</a>
+                    </div>
+                </div>
+                {% else %}
+                <p class="cert-none">No CA certificate is currently available.</p>
+                {% endif %}
+            </div>
 
             <div class="meta-info">
                 Member since {{ user.date_joined|date:"N j, Y" }}
