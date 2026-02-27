@@ -1368,3 +1368,290 @@ class TestAdminPanelServerCert:
         import socket
         hostname = socket.gethostname()
         assert_that(content, contains_string(hostname))
+
+
+@pytest.mark.django_db
+class TestAdminPanelClientCert:
+    """Test the Client Certificates section of the admin panel."""
+
+    def _create_ca(self, client: Client) -> None:
+        """Helper to create a CA certificate."""
+        client.post('/admin-panel/', {
+            'form_type': 'generate_ca',
+            'ca_common_name': 'Test CA',
+            'ca_validity_days': '3650',
+            'ca_key_size': '2048',
+        })
+
+    def _create_user(self, username: str = 'testuser') -> User:
+        """Helper to create a regular user."""
+        return User.objects.create_user(username=username, password='testpass123')
+
+    def test_admin_panel_shows_client_cert_section(self, admin_logged_in_client: Client) -> None:
+        """Admin panel should contain the client cert section header."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Client Certificates'))
+
+    def test_no_client_certs_message(self, admin_logged_in_client: Client) -> None:
+        """When no certs exist, show a placeholder message."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('No client certificates issued yet'))
+
+    def test_issue_form_requires_ca(self, admin_logged_in_client: Client) -> None:
+        """Without a CA, the issue form should show a message."""
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('CA certificate is required'))
+
+    def test_issue_form_shown_with_ca(self, admin_logged_in_client: Client) -> None:
+        """With an active CA, the issue form should be displayed."""
+        self._create_ca(admin_logged_in_client)
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('cc_user_id'))
+        assert_that(content, contains_string('cc_validity_days'))
+        assert_that(content, contains_string('cc_key_size'))
+        assert_that(content, contains_string('Issue Client Certificate'))
+
+    def test_issue_client_cert(self, admin_logged_in_client: Client) -> None:
+        """Submitting the form should issue a client certificate."""
+        from my_tracks.models import ClientCertificate
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+        assert_that(response.status_code, equal_to(status.HTTP_200_OK))
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('issued for'))
+
+        cert = ClientCertificate.objects.filter(user=user, is_active=True).first()
+        assert_that(cert, is_(not_none()))
+        assert_that(cert.common_name, equal_to('testuser'))  # type: ignore[union-attr]
+
+    def test_issue_cert_without_user_selection(self, admin_logged_in_client: Client) -> None:
+        """Issuing a cert without selecting a user should show an error."""
+        self._create_ca(admin_logged_in_client)
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': '',
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('select a user'))
+
+    def test_issue_cert_without_ca(self, admin_logged_in_client: Client) -> None:
+        """Issuing a cert without a CA should show an error."""
+        user = self._create_user()
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('No active CA'))
+
+    def test_issue_cert_deactivates_existing(self, admin_logged_in_client: Client) -> None:
+        """Issuing a new cert for a user should deactivate the old one."""
+        from my_tracks.models import ClientCertificate
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+        first = ClientCertificate.objects.get(user=user, is_active=True)
+
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+        first.refresh_from_db()
+        assert_that(first.is_active, is_(False))
+        second = ClientCertificate.objects.filter(user=user, is_active=True).first()
+        assert_that(second, is_(not_none()))
+
+    def test_client_cert_table_shown_after_issue(self, admin_logged_in_client: Client) -> None:
+        """After issuing, the cert should appear in the table."""
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user('tabluser')
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('tabluser'))
+        assert_that(content, contains_string('Download'))
+
+    def test_revoke_client_cert(self, admin_logged_in_client: Client) -> None:
+        """Revoking a client cert should mark it as revoked."""
+        from my_tracks.models import ClientCertificate
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+        cert = ClientCertificate.objects.get(user=user, is_active=True)
+
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'revoke_client_cert',
+            'cc_id': str(cert.pk),
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('revoked'))
+
+        cert.refresh_from_db()
+        assert_that(cert.revoked, is_(True))
+        assert_that(cert.is_active, is_(False))
+        assert_that(cert.revoked_at, is_(not_none()))
+
+    def test_revoke_already_revoked_cert(self, admin_logged_in_client: Client) -> None:
+        """Revoking an already-revoked cert should show an error."""
+        from my_tracks.models import ClientCertificate
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+        cert = ClientCertificate.objects.get(user=user, is_active=True)
+
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'revoke_client_cert',
+            'cc_id': str(cert.pk),
+        })
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'revoke_client_cert',
+            'cc_id': str(cert.pk),
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('already revoked'))
+
+    def test_expunge_revoked_client_cert(self, admin_logged_in_client: Client) -> None:
+        """Expunging a revoked cert should permanently delete it."""
+        from my_tracks.models import ClientCertificate
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+        cert = ClientCertificate.objects.get(user=user)
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'revoke_client_cert',
+            'cc_id': str(cert.pk),
+        })
+
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'expunge_client_cert',
+            'cc_id': str(cert.pk),
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('permanently deleted'))
+        assert_that(ClientCertificate.objects.filter(pk=cert.pk).exists(), is_(False))
+
+    def test_expunge_active_client_cert_rejected(self, admin_logged_in_client: Client) -> None:
+        """Expunging an active cert should be rejected."""
+        from my_tracks.models import ClientCertificate
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+        cert = ClientCertificate.objects.get(user=user, is_active=True)
+
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'expunge_client_cert',
+            'cc_id': str(cert.pk),
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Cannot expunge'))
+
+    def test_user_dropdown_lists_users(self, admin_logged_in_client: Client) -> None:
+        """The user dropdown should list all available users."""
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user('dropdownuser')
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('dropdownuser'))
+
+    def test_issue_cert_invalid_validity(self, admin_logged_in_client: Client) -> None:
+        """Invalid validity days should show an error."""
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': 'abc',
+            'cc_key_size': '2048',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('must be a number'))
+
+    def test_issue_cert_invalid_key_size(self, admin_logged_in_client: Client) -> None:
+        """Invalid key size should show an error."""
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '1024',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('Key size must be one of'))
+
+    def test_issue_cert_nonexistent_user(self, admin_logged_in_client: Client) -> None:
+        """Issuing a cert for a nonexistent user should show an error."""
+        self._create_ca(admin_logged_in_client)
+        response = admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': '99999',
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('not found'))
+
+    def test_download_link_present(self, admin_logged_in_client: Client) -> None:
+        """After issuing, a download link should be present."""
+        self._create_ca(admin_logged_in_client)
+        user = self._create_user()
+        admin_logged_in_client.post('/admin-panel/', {
+            'form_type': 'issue_client_cert',
+            'cc_user_id': str(user.pk),
+            'cc_validity_days': '365',
+            'cc_key_size': '2048',
+        })
+
+        response = admin_logged_in_client.get('/admin-panel/')
+        content = response.content.decode('utf-8')
+        assert_that(content, contains_string('/api/admin/pki/client-certs/'))
+        assert_that(content, contains_string('/download/'))
