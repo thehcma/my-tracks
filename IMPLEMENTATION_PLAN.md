@@ -230,7 +230,7 @@ Admin issues/revokes client certificates; users view and download their own.
   - Tests for user cert access, download formats
 
 ### Phase 6, Step 4: MQTT Broker TLS Integration
-Full TLS integration: server certificate presentation + client certificate authentication.
+Full TLS integration: server certificate presentation + client certificate authentication + CRL enforcement.
 
 - **Server-side TLS**
   - MQTT broker reads active server cert from database at startup
@@ -243,11 +243,26 @@ Full TLS integration: server certificate presentation + client certificate authe
 - **Client certificate authentication**
   - MQTT broker requires client certificate for TLS connections
   - Validate client cert is signed by active CA
-  - Check client cert against CRL (reject revoked certs)
   - Map client cert CN to Django user for topic ACL
   - Fallback to username/password auth when client cert not provided
 
-- Tests for TLS listener startup, cert loading, client cert validation, CRL checking
+- **Certificate validation & CRL enforcement** (CRITICAL)
+  - The broker MUST reject connections from clients presenting:
+    - A certificate not signed by the active CA (untrusted issuer)
+    - An expired certificate (`not_valid_after` in the past)
+    - A revoked certificate (serial number present on the CRL)
+  - CRL loaded into the broker's TLS context via `VERIFY_CRL_CHECK_LEAF`
+  - CRL refreshed when a certificate is revoked (regenerate + reload)
+  - Empty CRL (no revocations) must not block valid clients
+
+- **Tests** — mirror the existing `TestTLSHandshake` tests from `test_pki.py` in the MQTT broker context:
+  - TLS listener startup and cert loading from database
+  - Valid client cert → MQTT connection accepted, CN maps to correct user
+  - Untrusted cert (not signed by CA) → connection refused
+  - Expired client cert → connection refused
+  - Revoked client cert (on CRL) → connection refused
+  - Non-revoked client cert with CRL checking enabled → connection accepted
+  - CRL regeneration after revocation → previously-valid cert now rejected
 
 ### Phase 7: Advanced Integration
 1. **Transition events** — Handle region enter/exit events, store transition history
@@ -281,5 +296,4 @@ my_tracks/mqtt/
 
 ## Future Enhancements
 
-- **Certificate Revocation List (CRL)** — Publish CRL endpoint for external consumers; integrate with MQTT broker for real-time revocation checks
 - **ACME / Let's Encrypt** — Optional integration for publicly trusted server certificates instead of self-signed CA
