@@ -1,6 +1,6 @@
 # My Tracks — Implementation Plan
 
-**Last Updated**: February 26, 2026
+**Last Updated**: February 28, 2026
 
 ## Overview
 
@@ -154,82 +154,44 @@ Evolution plan for My Tracks, a self-hosted location tracking backend for the Ow
    - Eye icon toggle on login page, admin panel create-user form, and profile change-password form
    - Inline SVG icons (eye/eye-off), `aria-label` for accessibility, per-field independent toggles
 
+7. **PKI — Configurable Key Size & Server Certificate** ✅ (PR #276, #278, #279)
+   - Configurable RSA key size (2048, 3072, 4096) for CA, server, and client certs
+   - `ServerCertificate` model with encrypted private key, SANs, fingerprint
+   - `generate_server_certificate()` with auto-detected local IPs + hostname for SANs
+   - Admin REST API: generate, list, download, deactivate, expunge server certs
+   - Admin panel UI: "Server Certificate (MQTT TLS)" section with generate form and history
+
+8. **PKI — Client Certificate Management** ✅ (PR #289, #290, #291, #292, #293)
+   - `ClientCertificate` model (FK → User, FK → CA) with encrypted private key
+   - Certificate generation, revocation, and CRL generation (`generate_crl()`)
+   - 5-year default validity with configurable presets (1–5 years)
+   - Subject metadata display (CN, O, OU) in admin panel and profile page
+   - Admin REST API: issue, list, revoke, expunge client certs; download CRL
+   - Admin panel UI: issue cert for user, view all certs, revoke/expunge actions
+   - Profile page: certificate status, download cert + key bundle, CA cert download
+   - TLS handshake validation tests (server presents cert, client authenticates)
+
+9. **PKI — CRL Enforcement Tests** ✅ (PR #295)
+   - `TestTLSHandshake` integration tests simulating real TLS with `ssl` module
+   - Revoked client cert rejected (server raises `SSLError: certificate revoked`)
+   - Non-revoked client passes when CRL checking is enabled
+   - Handles TLS 1.3 deferred client verification (test verifies data exchange fails)
+
+10. **Admin Panel Restructure** ✅ (PR #307, #308)
+    - Tabbed interface: "Users" tab (create user + users table) and "PKI" tab (all cert operations)
+    - Users table shows client cert status with hover tooltip (CN, key size, expiry, serial)
+    - One-click cert issuance from users table for users without a cert
+    - CRL section: revoked certs table, revocation count, CRL download button
+    - Prominent section titles across all pages (admin panel, profile, about)
+    - Auto-build frontend assets (`npm run build`) on server startup
+    - `WHITENOISE_USE_FINDERS = True` in DEBUG mode for direct static file serving
+
+11. **Server Script Fix** ✅ (PR #309)
+    - Declining restart prompt no longer triggers cleanup of running processes
+
 ## Upcoming Work
 
-### Phase 6, Step 2b: PKI — Configurable Key Size & Server Certificate (in review)
-Configurable RSA key size across all PKI operations, plus server certificate for MQTT TLS.
-
-- **2b-i: Configurable RSA Key Size** (PR #276 — in review)
-  - Add `key_size` parameter to `generate_ca_certificate()` (default 4096, choices: 2048, 3072, 4096)
-  - Add `key_size` field to `CertificateAuthority` model to record key size used
-  - Admin panel UI: key size dropdown in CA generation form
-  - API: accept `key_size` in `POST /api/admin/pki/ca/`
-  - Migration for new `key_size` column (default 4096 for existing CAs)
-  - Tests for key size validation, model field, API parameter, UI dropdown
-
-- **2b-ii: Server Certificate Model & Generation** (PR #278 — in review)
-  - `ServerCertificate` model storing server cert + private key (signed by active CA):
-    - Certificate PEM, encrypted private key, common name, fingerprint
-    - `not_valid_before`, `not_valid_after`, `is_active` (singleton pattern with history)
-    - `key_size` (configurable: 2048, 3072, 4096), SANs list (JSON)
-    - FK → `CertificateAuthority` (issuing CA)
-  - `generate_server_certificate()` in `pki.py`:
-    - Accepts CA cert + key, server CN, validity days, key size, SANs
-    - Generates RSA key, creates X.509 cert signed by CA
-    - Includes SANs: all local IPs + hostname + user-provided entries
-    - Key usage: `digitalSignature`, `keyEncipherment`; extended: `serverAuth`
-  - Auto-detect local IPs and hostname for default SANs
-  - Admin REST API:
-    - `POST /api/admin/pki/server-cert/` — generate server cert from active CA
-    - `GET /api/admin/pki/server-cert/` — list server certs
-    - `GET /api/admin/pki/server-cert/active/` — get active server cert
-    - `GET /api/admin/pki/server-cert/{id}/download/` — download cert PEM
-    - `DELETE /api/admin/pki/server-cert/{id}/` — deactivate server cert
-    - `DELETE /api/admin/pki/server-cert/{id}/expunge/` — permanently delete inactive cert
-  - Tests for server cert generation, SAN validation, CA chain, key size, model, API
-
-- **2b-iii: Server Certificate Admin UI** (PR #279 — in review)
-  - Admin panel section: "Server Certificate (MQTT TLS)"
-  - Display active server cert: CN, SANs, fingerprint, validity, issuing CA, key size
-  - Generate form: CN (default hostname), validity days, key size dropdown, additional SANs
-  - Confirmation dialog when replacing active cert (show current cert details)
-  - Server cert history table with download and expunge actions
-  - Requires active CA — form disabled with message if no active CA exists
-  - Tests for admin panel rendering, form behavior, CA dependency
-
-### Phase 6, Step 3: Per-User Client Certificate Management ← NEXT
-Admin issues/revokes client certificates; users view and download their own.
-
-- **3a: Client Certificate Issuance & Revocation (Admin Panel)**
-  - `ClientCertificate` model (FK → User, FK → CA) storing:
-    - Client certificate (PEM)
-    - Private key (encrypted at rest)
-    - Serial number, expiry date, revocation status, revocation date
-    - `key_size` (configurable: 2048, 3072, 4096)
-  - Certificate generation using `cryptography` library (X.509, RSA keys)
-  - Certificate Revocation List (CRL) generation from revoked certs
-  - Admin panel UI:
-    - Issue certificate for a specific user (select user, set validity, key size)
-    - View all issued certificates with status (active/revoked/expired)
-    - Revoke a certificate (marks as revoked, updates CRL)
-  - Admin REST endpoints:
-    - `POST /api/admin/pki/client-certs/` — issue certificate for a user
-    - `GET /api/admin/pki/client-certs/` — list all issued certificates
-    - `POST /api/admin/pki/client-certs/{id}/revoke/` — revoke a certificate
-    - `GET /api/admin/pki/crl/` — download current CRL
-  - Tests for cert generation, signing chain validation, revocation, CRL, admin-only access
-
-- **3b: User Certificate Access & OwnTracks Configuration**
-  - Profile page (`/profile/`) shows allocated certificate:
-    - Certificate status (active, expiry date, fingerprint)
-    - Download certificate + key bundle (PEM or PKCS#12)
-    - OwnTracks connection settings (pre-filled MQTT config with TLS enabled)
-  - User REST endpoints:
-    - `GET /api/account/certificate/` — download current certificate + key bundle
-  - OwnTracks device configuration instructions for certificate-based auth
-  - Tests for user cert access, download formats
-
-### Phase 6, Step 4: MQTT Broker TLS Integration
+### Phase 6, Step 4: MQTT Broker TLS Integration ← NEXT
 Full TLS integration: server certificate presentation + client certificate authentication + CRL enforcement.
 
 - **Server-side TLS**
@@ -283,9 +245,12 @@ my_tracks/mqtt/
 
 ## Test Coverage
 
-- 597 Python tests + 79 TypeScript tests passing
-- 93%+ code coverage
-- All pyright checks pass
+- 672 Python tests + 79 TypeScript tests passing
+- 85.5% code coverage (**needs improvement to reach 90% target**)
+  - Key gaps: `serializers.py` (32%), `mqtt/plugin.py` (77%), `views.py` (85%)
+- All pyright checks pass (0 errors, 0 warnings)
+- All imports sorted (isort clean)
+- All shell scripts pass shellcheck
 
 ## Technical Notes
 
