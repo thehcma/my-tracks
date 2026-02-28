@@ -76,14 +76,14 @@
         }
 
         .section-title {
-            font-size: 0.875rem;
-            font-weight: 600;
+            font-size: 1.05rem;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--text-muted);
-            margin-bottom: 1rem;
+            letter-spacing: 0.8px;
+            color: var(--text);
+            margin-bottom: 1.25rem;
             padding-bottom: 0.5rem;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 2px solid var(--accent);
         }
 
         .message {
@@ -465,6 +465,90 @@
             outline: none;
             border-color: var(--accent);
         }
+
+        .tab-bar {
+            display: flex;
+            gap: 0;
+            margin-bottom: 0;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            cursor: pointer;
+            position: relative;
+            transition: color 0.2s;
+        }
+
+        .tab-btn:hover {
+            color: var(--text);
+        }
+
+        .tab-btn.active {
+            color: var(--accent);
+        }
+
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--accent);
+        }
+
+        .tab-panel:not(.active) {
+            display: none !important;
+        }
+
+        .tab-panel.active {
+            display: block;
+            padding-top: 1.5rem;
+        }
+
+        .cert-tooltip {
+            position: relative;
+            cursor: default;
+        }
+
+        .cert-tooltip .cert-tooltip-content {
+            display: none;
+            position: absolute;
+            z-index: 10;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 6px;
+            padding: 0.6rem 0.8rem;
+            background: #1a1a2e;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            color: var(--text);
+        }
+
+        .cert-tooltip:hover .cert-tooltip-content {
+            display: block;
+        }
+
+        .cert-tooltip-content .tt-row {
+            display: flex;
+            gap: 0.5rem;
+            padding: 2px 0;
+        }
+
+        .cert-tooltip-content .tt-label {
+            color: var(--text-muted);
+            min-width: 60px;
+        }
     </style>
 </head>
 <body>
@@ -478,6 +562,12 @@
         </div>
 
         <div class="admin-card">
+            <div class="tab-bar">
+                <button type="button" class="tab-btn {% if active_tab == 'users' %}active{% endif %}" data-tab="users">Users</button>
+                <button type="button" class="tab-btn {% if active_tab == 'pki' %}active{% endif %}" data-tab="pki">PKI</button>
+            </div>
+
+            <div id="tab-users" class="tab-panel {% if active_tab == 'users' %}active{% endif %}" {% if active_tab != 'users' %}style="display:none"{% endif %}>
             <h3 class="section-title">Create User</h3>
 
             {% if create_success %}
@@ -536,9 +626,8 @@
                 </div>
                 <button type="submit" class="submit-btn">Create User</button>
             </form>
-        </div>
 
-        <div class="admin-card">
+            <div style="margin-top: 2rem;">
             <h3 class="section-title">Users</h3>
 
             <table class="user-table">
@@ -548,6 +637,7 @@
                         <th>Email</th>
                         <th>Role</th>
                         <th>Status</th>
+                        <th>Client Cert</th>
                         <th>Last Login</th>
                         <th>Actions</th>
                     </tr>
@@ -569,6 +659,31 @@
                                 <span class="status-pill active">active</span>
                             {% else %}
                                 <span class="status-pill inactive">inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if u.active_cert %}
+                                <span class="cert-tooltip">
+                                    <span class="status-pill active">issued</span>
+                                    <span class="cert-tooltip-content">
+                                        <div class="tt-row"><span class="tt-label">CN</span><span>{{ u.active_cert.common_name }}</span></div>
+                                        <div class="tt-row"><span class="tt-label">Key</span><span>{{ u.active_cert.key_size }}-bit</span></div>
+                                        <div class="tt-row"><span class="tt-label">Expires</span><span>{{ u.active_cert.not_valid_after|date:"Y-m-d" }}</span></div>
+                                        <div class="tt-row"><span class="tt-label">Serial</span><span style="font-family:monospace;">{{ u.active_cert.serial_number|truncatechars:20 }}</span></div>
+                                    </span>
+                                </span>
+                            {% elif active_ca and u.is_active %}
+                                <form method="post" action="{% url 'web_ui:admin_panel' %}" style="display:inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="form_type" value="issue_client_cert">
+                                    <input type="hidden" name="cc_user_id" value="{{ u.pk }}">
+                                    <input type="hidden" name="cc_validity_days" value="{{ default_cert_validity }}">
+                                    <input type="hidden" name="cc_key_size" value="4096">
+                                    <button type="submit" class="action-btn" title="Issue client certificate with default settings"
+                                            onclick="return confirm('Issue a client certificate for \'{{ u.username }}\'?')">Issue Cert</button>
+                                </form>
+                            {% else %}
+                                <span style="color: var(--text-muted); font-size: 0.75rem;">—</span>
                             {% endif %}
                         </td>
                         <td>{{ u.last_login|date:"Y-m-d H:i"|default:"never" }}</td>
@@ -606,9 +721,10 @@
                 </tbody>
             </table>
             <p class="user-count">{{ users|length }} user{{ users|length|pluralize }}</p>
-        </div>
+            </div>
+            </div>
 
-        <div class="admin-card">
+            <div id="tab-pki" class="tab-panel {% if active_tab == 'pki' %}active{% endif %}" {% if active_tab != 'pki' %}style="display:none"{% endif %}>
             <h3 class="section-title">PKI — Certificate Authority</h3>
 
             {% if ca_success %}
@@ -739,9 +855,9 @@
                 </table>
             </div>
             {% endif %}
-        </div>
 
-        <div class="admin-card">
+            <hr class="section-divider" style="margin: 2rem 0; border-color: var(--border);">
+
             <h3 class="section-title">PKI — Server Certificate (MQTT TLS)</h3>
 
             {% if sc_success %}
@@ -894,9 +1010,9 @@
                 </table>
             </div>
             {% endif %}
-        </div>
 
-        <div class="admin-card">
+            <hr class="section-divider" style="margin: 2rem 0; border-color: var(--border);">
+
             <h3 class="section-title">PKI — Client Certificates</h3>
 
             {% if cc_success %}
@@ -1006,6 +1122,54 @@
                 <p class="ca-no-active">A CA certificate is required before issuing client certificates.</p>
                 {% endif %}
             </div>
+
+            <div style="margin-top: 2rem;">
+            <h3 class="section-title">PKI — Certificate Revocation List</h3>
+
+            {% if active_ca %}
+            <div class="crl-meta" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+                <span style="font-size:0.9rem; color:var(--text-muted);">
+                    {% if revoked_certs %}
+                        {{ revoked_certs|length }} revoked certificate{{ revoked_certs|length|pluralize }}
+                    {% else %}
+                        No certificates have been revoked
+                    {% endif %}
+                </span>
+                {% if revoked_certs %}
+                <a href="/api/admin/pki/crl/" class="action-btn" title="Download the signed CRL in PEM format">Download CRL</a>
+                {% endif %}
+            </div>
+
+            {% if revoked_certs %}
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Common Name</th>
+                        <th>Serial Number</th>
+                        <th>Revoked At</th>
+                        <th>Original Expiry</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rc in revoked_certs %}
+                    <tr class="inactive">
+                        <td>{{ rc.user.username }}</td>
+                        <td>{{ rc.common_name }}</td>
+                        <td style="font-family:monospace; font-size:0.8rem;">{{ rc.serial_number }}</td>
+                        <td>{{ rc.revoked_at|date:"Y-m-d H:i" }}</td>
+                        <td>{{ rc.not_valid_after|date:"Y-m-d" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% else %}
+            <p class="ca-no-active">A CA certificate is required to generate a CRL.</p>
+            {% endif %}
+            </div>
+            </div>
         </div>
     </div>
 
@@ -1039,6 +1203,24 @@
     </div>
 
     <script>
+        function switchTab(target) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => {
+                p.classList.remove('active');
+                p.style.display = 'none';
+            });
+            const btn = document.querySelector('.tab-btn[data-tab="' + target + '"]');
+            const panel = document.getElementById('tab-' + target);
+            if (btn) btn.classList.add('active');
+            if (panel) { panel.classList.add('active'); panel.style.display = 'block'; }
+        }
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+
+        switchTab('{{ active_tab }}');
+
         document.querySelectorAll('.api-action').forEach(form => {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();

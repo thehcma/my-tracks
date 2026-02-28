@@ -156,6 +156,10 @@ STORAGES: dict[str, dict[str, str]] = {
     },
 }
 
+if DEBUG:
+    WHITENOISE_USE_FINDERS = True
+    WHITENOISE_AUTOREFRESH = True
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
