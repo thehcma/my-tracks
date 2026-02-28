@@ -230,6 +230,7 @@ if [ -n "$existing_pids" ]; then
             ;;
         *)
             echo "Cancelled. Existing server(s) will continue running."
+            trap - INT TERM EXIT
             exit 0
             ;;
     esac
